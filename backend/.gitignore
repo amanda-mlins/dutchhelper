@@ -1,0 +1,16 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+# The venv helper sometimes writes a catch-all '*' which unintentionally
+# ignores all repository files under the backend/ directory. Replace that
+# broad rule with a small set of typical virtualenv artifacts to ignore.
+
+# Virtual environment files and folders
+pyvenv.cfg
+bin/
+include/
+lib/
+lib64/
+pip-selfcheck.json
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+

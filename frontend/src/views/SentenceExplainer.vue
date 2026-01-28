@@ -52,8 +52,11 @@
             <div class="analysis-group">
               <h3>Sentences Found: {{ sentences.length }}</h3>
               <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
-                <p class="sentence-text">{{ sentenceData.sentence }}</p>
-                
+                <div class="sentence-text">{{ sentenceData.sentence }}
+                <button class="collapse-btn" @click="toggleCollapse(idx)">
+                          {{ sentenceData.collapsed ? 'Show details ▼' : 'Hide details ▲' }}
+                </button>
+                </div>
                 <!-- Loading state for individual sentence -->
                 <div v-if="sentenceData.loading" class="sentence-loading">
                   <p>⏳ Analyzing this sentence...</p>
@@ -66,10 +69,12 @@
                 
                 <!-- Success state -->
                 <div v-else>
-                  <p v-if="sentenceData.sentence_translation" class="sentence-translation">
+
+                  <p v-if="sentenceData.sentence_translation" class="sentence-translation" >
                     📝 {{ sentenceData.sentence_translation }}
+                  
                   </p>
-                  <div v-if="sentenceData.components.length > 0" class="components-list">
+                  <div v-if="sentenceData.components.length > 0" v-show="!sentenceData.collapsed" class="components-list">
                     <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
                       <div class="component-header">
                         <strong>{{ comp.type }}</strong>: {{ comp.value }}
@@ -158,6 +163,9 @@ export default {
         })
         .join(' • ')
     },
+    toggleCollapse(idx) {
+        this.sentences[idx].collapsed = !this.sentences[idx].collapsed
+    },
     async checkApiHealth() {
       try {
         const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 3000 })
@@ -193,6 +201,7 @@ export default {
             sentence: sentence,
             sentence_translation: 'Analyzing...',
             components: [],
+            collapsed: true,
             loading: true,
             error: null
           }))
@@ -379,6 +388,16 @@ export default {
   cursor: pointer;
   transition: all 0.3s;
   flex-shrink: 0;
+}
+
+.collapse-btn {
+  background: none;
+  border: none;
+  color: #667eea;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 30px;
+  font-weight: 600;
 }
 
 .analyze-button:hover:not(:disabled) {
