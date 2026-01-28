@@ -7,6 +7,7 @@ Updated `SentenceExplainer.vue` to use a button for triggering analysis instead 
 ## Key Changes
 
 ### 1. UI Layout
+
 ```
 Input Section (Left):
   ┌─────────────────────┐
@@ -21,6 +22,7 @@ Input Section (Left):
 ```
 
 ### 2. Button Features
+
 - ✅ Enabled when text is present
 - ✅ Disabled when text is empty
 - ✅ Shows "🔄 Analyzing..." while processing
@@ -28,6 +30,7 @@ Input Section (Left):
 - ✅ Clear visual feedback
 
 ### 3. Cost Savings
+
 - **Before**: 1 API call per keystroke (lots of calls while typing)
 - **After**: 1 API call per button click (controlled usage)
 - **Result**: ~16x fewer API calls for typical input!
@@ -83,6 +86,7 @@ Loading (Gray, Disabled):
 **Typing: "Ik ben een jongen"**
 
 Old (Real-Time):
+
 - I → Call
 - k → Call
 - (space) → Call
@@ -103,6 +107,7 @@ Old (Real-Time):
 **Total: 17 API calls**
 
 New (Button):
+
 - Type text... (0 calls)
 - Click button → Call
 **Total: 1 API call**
@@ -120,4 +125,3 @@ New (Button):
 ---
 
 **Your app now uses the API much more efficiently!** 🚀
-

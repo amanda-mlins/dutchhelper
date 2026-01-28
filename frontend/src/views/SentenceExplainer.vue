@@ -52,10 +52,23 @@
               <h3>Sentences Found: {{ sentences.length }}</h3>
               <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
                 <p class="sentence-text">{{ sentenceData.sentence }}</p>
+                <p v-if="sentenceData.sentence_translation" class="sentence-translation">
+                  📝 {{ sentenceData.sentence_translation }}
+                </p>
                 <div v-if="sentenceData.components.length > 0" class="components-list">
-                  <span v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
-                    <strong>{{ comp.type }}</strong>: {{ comp.value }}
-                  </span>
+                  <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
+                    <div class="component-header">
+                      <strong>{{ comp.type }}</strong>: {{ comp.value }}
+                    </div>
+                    <div v-if="comp.translation || comp.details" class="component-details">
+                      <span v-if="comp.translation" class="detail-item">
+                        <em>{{ comp.translation }}</em>
+                      </span>
+                      <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item">
+                        {{ formatDetails(comp.details) }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div v-else class="no-components">
                   <p>No components identified</p>
@@ -114,6 +127,21 @@ export default {
     }
   },
   methods: {
+    formatDetails(details) {
+      if (!details || typeof details !== 'object') return ''
+      
+      return Object.entries(details)
+        .map(([key, value]) => {
+          // Format key (e.g., 'verb-tense' -> 'Verb Tense')
+          const formattedKey = key
+            .split('-')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ')
+          
+          return `${formattedKey}: ${value}`
+        })
+        .join(' • ')
+    },
     async checkApiHealth() {
       try {
         const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 3000 })
@@ -365,29 +393,62 @@ export default {
 .sentence-text {
   color: #333;
   line-height: 1.6;
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   font-weight: 500;
+}
+
+.sentence-translation {
+  color: #667eea;
+  line-height: 1.6;
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  font-style: italic;
+  background: #f0f4ff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #667eea;
 }
 
 .components-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
 }
 
 .component-tag {
   display: inline-block;
   background: #e8eef7;
   color: #667eea;
-  padding: 6px 10px;
-  border-radius: 3px;
+  padding: 10px 12px;
+  border-radius: 6px;
   font-size: 12px;
   border: 1px solid #d0dce6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.component-header {
+  margin-bottom: 6px;
 }
 
 .component-tag strong {
   color: #667eea;
   font-weight: 600;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.component-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #d0dce6;
+}
+
+.detail-item {
+  font-size: 11px;
+  color: #555;
+  line-height: 1.4;
 }
 
 .no-components {

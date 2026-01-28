@@ -9,6 +9,7 @@ Your Sentence Explainer component now uses an **Analyze button** to trigger API 
 ### Frontend Change (SentenceExplainer.vue)
 
 **Template:**
+
 ```vue
 <!-- BEFORE: Analysis on every keystroke -->
 <textarea @input="analyzeText" ...></textarea>
@@ -19,6 +20,7 @@ Your Sentence Explainer component now uses an **Analyze button** to trigger API 
 ```
 
 **Button Features:**
+
 - ✅ **Enabled** when text is present (blue, clickable)
 - ✅ **Disabled** when text is empty (gray, not clickable)
 - ✅ **Loading** state shows "🔄 Analyzing..." while processing
@@ -28,6 +30,7 @@ Your Sentence Explainer component now uses an **Analyze button** to trigger API 
 ## Cost Impact
 
 ### Real-Time Analysis (OLD)
+
 ```
 User types: "Ik ben"
 - Press I → API call
@@ -41,6 +44,7 @@ Total: 6 API calls for 5 characters
 ```
 
 ### Button-Based Analysis (NEW)
+
 ```
 User types: "Ik ben"
 - Press I → No call
@@ -122,6 +126,7 @@ Total: 1 API call for 5 characters
 **File:** `frontend/src/views/SentenceExplainer.vue`
 
 **Template:**
+
 - Removed `@input="analyzeText"` from textarea
 - Added `<button>` with `@click="analyzeText"`
 - Button shows loading state: `{{ loading ? '🔄 Analyzing...' : '▶ Analyze' }}`
@@ -129,12 +134,14 @@ Total: 1 API call for 5 characters
 - New `.controls` div to organize char-count and button
 
 **Styles:**
+
 - Added `.controls` - flex layout for char-count and button
 - Added `.analyze-button` - blue button styling
 - Added `.analyze-button:hover` - darker blue on hover with lift effect
 - Added `.analyze-button:disabled` - gray styling for disabled state
 
 **Script:**
+
 - ✅ No changes needed! (analyzeText method works as-is)
 
 ## Benefits
@@ -153,10 +160,12 @@ Total: 1 API call for 5 characters
 **Assume:** Average user types 200 characters per analysis
 
 ### Old (Real-Time)
+
 - 200 keystrokes = 200 API calls
 - 200 calls × $0.00015/1k tokens = $0.03 per analysis
 
 ### New (Button)
+
 - 200 keystrokes = 1 API call
 - 1 call × $0.00015/1k tokens = $0.00015 per analysis
 
@@ -176,28 +185,35 @@ Total: 1 API call for 5 characters
 ## How to Use
 
 ### Step 1: Open App
+
 Visit `http://localhost:5173/` → Click "Sentence Explainer"
 
 ### Step 2: Enter Text
+
 Type or paste Dutch text into the textarea
 
 ### Step 3: Click Analyze
+
 Click the blue **"▶ Analyze"** button
 
 ### Step 4: See Results
+
 Results appear on the right showing grammatical breakdown
 
 ### Step 5: Edit & Re-analyze
+
 Edit text and click Analyze again
 
 ## Example Usage
 
 ### Input
+
 ```
 Ik ben een jongen. De kat zit op de mat.
 ```
 
 ### What Happens
+
 1. User types text (no API calls)
 2. Clicks "▶ Analyze"
 3. Button shows "🔄 Analyzing..."
@@ -209,6 +225,7 @@ Ik ben een jongen. De kat zit op de mat.
    - Summary stats
 
 ### Output
+
 ```
 Sentences Found: 2
 
@@ -265,11 +282,13 @@ frontend/src/views/SentenceExplainer.vue
 ## Performance Impact
 
 ### API Calls Reduced By
+
 - **Per typing session**: ~99%
 - **Daily (200 users, 5 analyses each)**: ~1000 calls → ~1000 calls (no change in volume, just user-controlled)
 - **Cost**: Same number of users = much lower cost
 
 ### Speed Impact
+
 - **Typing**: Faster (no lag from API calls)
 - **Analysis time**: Same (backend unchanged)
 - **UX**: Better (user knows what's happening)
@@ -277,6 +296,7 @@ frontend/src/views/SentenceExplainer.vue
 ## Rollback (If Needed)
 
 To revert to real-time analysis:
+
 1. Add `@input="analyzeText"` back to textarea
 2. Remove the button
 3. Remove `.controls` and button styles
@@ -293,4 +313,3 @@ But we recommend keeping the button - it's much better! ✨
 ✅ **Ready for production**
 
 Your DutchHelper app is now optimized for efficiency and cost-effectiveness! 🚀
-

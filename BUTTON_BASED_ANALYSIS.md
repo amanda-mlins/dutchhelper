@@ -7,12 +7,14 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ## 🔄 Before vs After
 
 ### Before
+
 - **Analysis Trigger**: Every keystroke (@input event)
 - **API Calls**: Many (one per keystroke for longer texts)
 - **Cost**: Higher due to frequent requests
 - **User Experience**: Instant feedback but too many requests
 
 ### After
+
 - **Analysis Trigger**: Click the "Analyze" button
 - **API Calls**: One per button click
 - **Cost**: Much lower, controlled requests
@@ -21,21 +23,25 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ## 🎯 Benefits
 
 ✅ **Reduced API Calls**
+
 - Only sends requests when user explicitly clicks Analyze
 - Saves cost on OpenRouter API
 - More efficient LLM usage
 
 ✅ **Better Control**
+
 - User decides when to send text
 - Can edit text before sending
 - Preview before analyzing
 
 ✅ **Improved Performance**
+
 - No lag while typing
 - Faster, more responsive textarea
 - Better for longer texts
 
 ✅ **Professional UX**
+
 - Clear call-to-action button
 - Shows loading state: "🔄 Analyzing..."
 - Button disables when text is empty
@@ -61,16 +67,19 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ### Button States
 
 **Idle (text present)**
+
 ```
 [▶ Analyze]  ← Blue, clickable
 ```
 
 **Disabled (no text)**
+
 ```
 [▶ Analyze]  ← Gray, disabled, can't click
 ```
 
 **Loading (analyzing)**
+
 ```
 [🔄 Analyzing...]  ← Gray, disabled, shows progress
 ```
@@ -78,6 +87,7 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ## 📝 Code Changes
 
 ### Template
+
 ```vue
 <!-- Removed: @input="analyzeText" -->
 <textarea 
@@ -97,6 +107,7 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ```
 
 ### Styling
+
 ```css
 .controls {
   display: flex;
@@ -129,6 +140,7 @@ The Sentence Explainer now uses a button to trigger analysis instead of analyzin
 ```
 
 ### Script
+
 ```javascript
 // analyzeText() method unchanged
 // It's now called on button click instead of input event
@@ -145,19 +157,25 @@ async analyzeText() {
 ## 🚀 How to Use
 
 ### Step 1: Enter Text
+
 Type or paste Dutch text into the textarea:
+
 ```
 Ik ben een jongen. De kat zit op de mat.
 ```
 
 ### Step 2: Edit as Needed
+
 You can edit the text as much as you want without triggering analysis.
 
 ### Step 3: Click Analyze
+
 When ready, click the blue **"▶ Analyze"** button.
 
 ### Step 4: View Results
+
 Results appear on the right side showing:
+
 - Sentences found
 - Grammatical components
 - Summary statistics
@@ -165,7 +183,9 @@ Results appear on the right side showing:
 ## 💰 Cost Reduction Example
 
 ### Before (Real-Time Analysis)
+
 Typing "Ik ben een jongen" (17 characters):
+
 - I → Analysis
 - k → Analysis
 - (space) → Analysis
@@ -175,7 +195,9 @@ Typing "Ik ben een jongen" (17 characters):
 **Total: 17 API calls for one sentence**
 
 ### After (Button-Based Analysis)
+
 Typing "Ik ben een jongen" (17 characters):
+
 - I → No call
 - k → No call
 - (space) → No call
@@ -234,27 +256,32 @@ Typing "Ik ben een jongen" (17 characters):
 ### Test Cases
 
 **Test 1: Button Disabled When Empty**
+
 - Open page
 - Button should be gray and disabled
 - ✅ Pass: Button is disabled
 
 **Test 2: Button Enabled When Text Present**
+
 - Type "Hello"
 - Button should be blue and clickable
 - ✅ Pass: Button is enabled
 
 **Test 3: Analysis Works**
+
 - Type "Ik ben een jongen."
 - Click Analyze
 - Results should appear
 - ✅ Pass: Results displayed
 
 **Test 4: Loading State**
+
 - Click Analyze
 - Button should show "🔄 Analyzing..."
 - ✅ Pass: Loading text displayed
 
 **Test 5: Error Handling**
+
 - Type text
 - Backend not running
 - Should show error message
@@ -287,6 +314,7 @@ Typing "Ik ben een jongen" (17 characters):
 ## 🎉 Summary
 
 Your Sentence Explainer now:
+
 - ✅ Uses a button to control analysis
 - ✅ Only sends requests when needed
 - ✅ Reduces API costs significantly
@@ -294,4 +322,3 @@ Your Sentence Explainer now:
 - ✅ Looks more professional
 
 **The app is now more efficient and cost-effective!** 🚀
-
