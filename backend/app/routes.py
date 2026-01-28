@@ -1,7 +1,7 @@
 """API routes for DutchHelper"""
 import logging
-from fastapi import APIRouter
-from app.models import Message, TextAnalysisRequest, TextAnalysisResponse
+from fastapi import APIRouter, HTTPException
+from app.models import Message, TextAnalysisRequest, AnalyzeSentenceRequest, TextAnalysisResponse, SentenceAnalysis
 from app.services import SentenceAnalyzerService
 from app.exceptions import ValidationError, ProcessingError
 
@@ -55,3 +55,45 @@ async def analyze_text(request: TextAnalysisRequest):
     except Exception as e:
         logger.error(f"Error analyzing text: {str(e)}")
         raise ProcessingError(f"Failed to analyze text: {str(e)}")
+
+@router.post("/analyze-sentence", response_model=SentenceAnalysis)
+async def analyze_sentence(request: AnalyzeSentenceRequest):
+    """
+    Analyze a single sentence for grammatical components.
+    
+    This endpoint is designed to be called from the frontend for parallel processing.
+    Multiple requests are sent concurrently, with each sentence analyzed independently.
+    Results are returned as soon as they're ready, enabling progressive UI updates.
+    
+    Args:
+        request: AnalyzeSentenceRequest containing a single sentence to analyze
+        
+    Returns:
+        SentenceAnalysis with sentence translation and grammatical components
+        
+    Raises:
+        HTTPException: If sentence is empty or analysis fails
+    """
+    try:
+        sentence = request.sentence.strip()
+        
+        if not sentence:
+            raise HTTPException(status_code=400, detail="Sentence cannot be empty")
+        
+        logger.info(f"[Parallel] Analyzing sentence: {sentence[:50]}...")
+        
+        # Use service to analyze single sentence
+        result = await SentenceAnalyzerService.analyze_single_sentence(sentence)
+        
+        logger.info(f"[Parallel] Analysis complete for: {sentence[:50]}...")
+        
+        return result
+        
+    except ProcessingError as e:
+        logger.error(f"[Parallel] Processing error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Parallel] Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -29,8 +29,9 @@
             </button>
           </div>
         </div>
-
+      </div>
         <!-- Analysis Section -->
+      <div class="explainer-container">
         <div class="section analysis-section">
           <h2>Grammatical Analysis</h2>
           
@@ -52,26 +53,40 @@
               <h3>Sentences Found: {{ sentences.length }}</h3>
               <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
                 <p class="sentence-text">{{ sentenceData.sentence }}</p>
-                <p v-if="sentenceData.sentence_translation" class="sentence-translation">
-                  📝 {{ sentenceData.sentence_translation }}
-                </p>
-                <div v-if="sentenceData.components.length > 0" class="components-list">
-                  <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
-                    <div class="component-header">
-                      <strong>{{ comp.type }}</strong>: {{ comp.value }}
-                    </div>
-                    <div v-if="comp.translation || comp.details" class="component-details">
-                      <span v-if="comp.translation" class="detail-item">
-                        <em>{{ comp.translation }}</em>
-                      </span>
-                      <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item">
-                        {{ formatDetails(comp.details) }}
-                      </span>
+                
+                <!-- Loading state for individual sentence -->
+                <div v-if="sentenceData.loading" class="sentence-loading">
+                  <p>⏳ Analyzing this sentence...</p>
+                </div>
+                
+                <!-- Error state for individual sentence -->
+                <div v-else-if="sentenceData.error" class="sentence-error">
+                  <p>❌ Failed to analyze: {{ sentenceData.error }}</p>
+                </div>
+                
+                <!-- Success state -->
+                <div v-else>
+                  <p v-if="sentenceData.sentence_translation" class="sentence-translation">
+                    📝 {{ sentenceData.sentence_translation }}
+                  </p>
+                  <div v-if="sentenceData.components.length > 0" class="components-list">
+                    <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
+                      <div class="component-header">
+                        <strong>{{ comp.type }}</strong>: {{ comp.value }}
+                      </div>
+                      <div v-if="comp.translation || comp.details" class="component-details">
+                        <span v-if="comp.translation" class="detail-item">
+                          <em>{{ comp.translation }}</em>
+                        </span>
+                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item">
+                          {{ formatDetails(comp.details) }}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div v-else class="no-components">
-                  <p>No components identified</p>
+                  <div v-else class="no-components">
+                    <p>No components identified</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -103,6 +118,7 @@
 
 <script>
 import axios from 'axios'
+import { prepareSentences } from '@/utils/sentenceUtils'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -162,11 +178,54 @@ export default {
         this.loading = true
         this.error = null
         
-        const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
-          text: this.dutchText
-        }, { timeout: 30000 })
+        // Step 1: Split and validate sentences on frontend
+        const sentences = prepareSentences(this.dutchText)
         
-        this.analysis = response.data
+        if (sentences.length === 0) {
+          this.error = 'No valid sentences found. Please enter text with actual words.'
+          this.loading = false
+          return
+        }
+        
+        // Step 2: Initialize analysis structure with loading states
+        this.analysis = {
+          sentences: sentences.map(sentence => ({
+            sentence: sentence,
+            sentence_translation: 'Analyzing...',
+            components: [],
+            loading: true,
+            error: null
+          }))
+        }
+        
+        // Step 3: Send ALL requests in parallel
+        const analyzePromises = sentences.map((sentence, index) =>
+          axios.post(`${API_BASE_URL}/api/analyze-sentence`, { sentence }, { timeout: 25000 })
+            .then(response => ({
+              index,
+              data: response.data,
+              status: 'success'
+            }))
+            .catch(error => ({
+              index,
+              error: error.response?.data?.detail || error.message,
+              status: 'error'
+            }))
+        )
+        
+        // Step 4: Wait for all to complete
+        const results = await Promise.all(analyzePromises)
+        
+        // Step 5: Update UI with results as they're processed
+        results.forEach(result => {
+          if (result.status === 'success') {
+            this.analysis.sentences[result.index] = result.data
+          } else {
+            this.analysis.sentences[result.index].error = result.error
+            this.analysis.sentences[result.index].loading = false
+          }
+        })
+        
       } catch (err) {
         console.error('Analysis error:', err)
         if (err.response?.data?.detail) {
@@ -185,7 +244,7 @@ export default {
   mounted() {
     this.checkApiHealth()
     // Check health every 10 seconds
-    setInterval(() => this.checkApiHealth(), 10000)
+    setInterval(() => this.checkApiHealth(), 300000)
   }
 }
 </script>
@@ -253,9 +312,9 @@ export default {
 
 .explainer-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
   gap: 20px;
-  min-height: 500px;
+  min-height: 300px;
 }
 
 .section {
@@ -484,6 +543,45 @@ export default {
   font-size: 24px;
   font-weight: 700;
   color: #333;
+}
+
+.sentence-loading {
+  background: #e7f3ff;
+  border-left: 4px solid #1890ff;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.sentence-loading p {
+  color: #1890ff;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 500;
+}
+
+.sentence-error {
+  background: #fff5f5;
+  border-left: 4px solid #ff4d4f;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.sentence-error p {
+  color: #ff4d4f;
+  font-size: 13px;
+  margin: 0;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 /* Responsive design */

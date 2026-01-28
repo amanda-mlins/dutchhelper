@@ -25,6 +25,10 @@ class TextAnalysisRequest(BaseModel):
     """Request to analyze Dutch text"""
     text: str
 
+class AnalyzeSentenceRequest(BaseModel):
+    """Request to analyze a single sentence - for parallel frontend processing"""
+    sentence: str
+
 class TextAnalysisResponse(BaseModel):
     """Response with complete text analysis"""
     original_text: str
