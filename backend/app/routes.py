@@ -44,7 +44,7 @@ async def analyze_text(request: TextAnalysisRequest):
         
         logger.info(f"Analyzing text: {request.text[:100]}...")
         
-        analysis = SentenceAnalyzerService.analyze_text(request.text)
+        analysis = await SentenceAnalyzerService.analyze_text(request.text)
         
         logger.info(f"Analysis complete: {len(analysis.sentences)} sentences found")
         

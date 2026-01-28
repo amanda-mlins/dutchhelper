@@ -4,6 +4,9 @@
       <router-link to="/" class="back-link">← Back to Home</router-link>
       <h1>📖 Sentence Explainer</h1>
       <p>Break down Dutch sentences into grammatical components</p>
+      <div class="api-status">
+        {{ apiHealth === 'healthy' ? '✅ Backend Connected' : '❌ Backend Offline' }}
+      </div>
     </header>
 
     <main class="main">
@@ -14,9 +17,17 @@
             v-model="dutchText"
             placeholder="Enter Dutch text here..."
             class="textarea"
-            @input="analyzeText"
           ></textarea>
-          <div class="char-count">{{ dutchText.length }} characters</div>
+          <div class="controls">
+            <div class="char-count">{{ dutchText.length }} characters</div>
+            <button 
+              @click="analyzeText" 
+              :disabled="!dutchText.trim() || loading"
+              class="analyze-button"
+            >
+              {{ loading ? '🔄 Analyzing...' : '▶ Analyze' }}
+            </button>
+          </div>
         </div>
 
         <!-- Analysis Section -->
@@ -24,15 +35,15 @@
           <h2>Grammatical Analysis</h2>
           
           <div v-if="loading" class="loading-state">
-            <p>Analyzing text...</p>
+            <p>🔄 Analyzing text...</p>
           </div>
 
           <div v-else-if="error" class="error-state">
-            <p>{{ error }}</p>
+            <p>❌ {{ error }}</p>
           </div>
 
           <div v-else-if="dutchText.trim() === ''" class="empty-state">
-            <p>Enter Dutch text on the left to see the analysis here</p>
+            <p>Enter Dutch text on the left and click "Analyze" to see the results here</p>
           </div>
 
           <div v-else class="analysis-content">
@@ -47,7 +58,7 @@
                   </span>
                 </div>
                 <div v-else class="no-components">
-                  <p>No components identified yet</p>
+                  <p>No components identified</p>
                 </div>
               </div>
             </div>
@@ -63,6 +74,10 @@
                 <div class="stat">
                   <span class="stat-label">Total Characters</span>
                   <span class="stat-value">{{ dutchText.length }}</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Total Components</span>
+                  <span class="stat-value">{{ totalComponents }}</span>
                 </div>
               </div>
             </div>
@@ -85,19 +100,33 @@ export default {
       dutchText: '',
       analysis: null,
       loading: false,
-      error: null
+      error: null,
+      apiHealth: 'checking'
     }
   },
   computed: {
     sentences() {
       if (!this.analysis || !this.analysis.sentences) return []
       return this.analysis.sentences
+    },
+    totalComponents() {
+      return this.sentences.reduce((total, sentence) => total + sentence.components.length, 0)
     }
   },
   methods: {
+    async checkApiHealth() {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 3000 })
+        this.apiHealth = response.data.status === 'healthy' ? 'healthy' : 'unhealthy'
+      } catch (error) {
+        this.apiHealth = 'offline'
+        console.warn('Backend health check failed:', error.message)
+      }
+    },
     async analyzeText() {
       if (!this.dutchText.trim()) {
         this.analysis = null
+        this.error = null
         return
       }
 
@@ -107,16 +136,28 @@ export default {
         
         const response = await axios.post(`${API_BASE_URL}/api/analyze`, {
           text: this.dutchText
-        })
+        }, { timeout: 30000 })
         
         this.analysis = response.data
       } catch (err) {
-        this.error = 'Failed to analyze text: ' + (err.response?.data?.detail || err.message)
+        console.error('Analysis error:', err)
+        if (err.response?.data?.detail) {
+          this.error = `Failed to analyze text: ${err.response.data.detail}`
+        } else if (err.message === 'Network Error') {
+          this.error = 'Backend is not running. Make sure the server is started on http://localhost:8000'
+        } else {
+          this.error = `Failed to analyze text: ${err.message}`
+        }
         this.analysis = null
       } finally {
         this.loading = false
       }
     }
+  },
+  mounted() {
+    this.checkApiHealth()
+    // Check health every 10 seconds
+    setInterval(() => this.checkApiHealth(), 10000)
   }
 }
 </script>
@@ -165,6 +206,15 @@ export default {
 .header p {
   font-size: 18px;
   opacity: 0.9;
+  margin-bottom: 15px;
+}
+
+.api-status {
+  font-size: 14px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  display: inline-block;
 }
 
 .main {
@@ -221,7 +271,39 @@ export default {
   margin-top: 10px;
   font-size: 12px;
   color: #999;
-  text-align: right;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.analyze-button {
+  padding: 10px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.analyze-button:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.analyze-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .analysis-section {
@@ -244,6 +326,7 @@ export default {
   height: 100%;
   color: #667eea;
   text-align: center;
+  font-size: 18px;
 }
 
 .error-state {
@@ -283,6 +366,7 @@ export default {
   color: #333;
   line-height: 1.6;
   margin: 0 0 10px 0;
+  font-weight: 500;
 }
 
 .components-list {
