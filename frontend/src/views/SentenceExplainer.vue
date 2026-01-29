@@ -52,11 +52,23 @@
             <div class="analysis-group">
               <h3>Sentences Found: {{ sentences.length }}</h3>
                     <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
-                <div class="sentence-text">{{ sentenceData.sentence }}
-                <button class="collapse-btn" @click="toggleCollapse(idx)">
+                      <div class="sentence-text">
+                        <span v-for="(seg, sidx) in getSentenceSegments(sentenceData, idx)" :key="sidx">
+                          <span
+                            v-if="seg.compId"
+                            class="sentence-word"
+                            :class="{ highlight: hovered === seg.compId }"
+                            @mouseenter="setHover(seg.compId)"
+                            @mouseleave="clearHover"
+                          >
+                            {{ seg.text }}
+                          </span>
+                          <span v-else>{{ seg.text }}</span>
+                        </span>
+                        <button class="collapse-btn" @click="toggleCollapse(idx)">
                           {{ sentenceData.collapsed ? 'Show details ▼' : 'Hide details ▲' }}
-                </button>
-                </div>
+                        </button>
+                      </div>
                 <!-- Loading state for individual sentence -->
                 <div v-if="sentenceData.loading" class="sentence-loading">
                   <p>⏳ Analyzing this sentence...</p>
@@ -79,15 +91,24 @@
                       <span v-if="sentenceData.completedAt" class="completed-time">Completed at {{ formatTime(sentenceData.completedAt) }}</span>
                     </div>
                   <div v-if="sentenceData.components.length > 0" v-show="!sentenceData.collapsed" class="components-list">
-                    <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
+                    <div
+                      v-for="(comp, compIdx) in sentenceData.components"
+                      :key="compIdx"
+                      class="component-tag"
+                      :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"
+                      @mouseenter="setHover('s' + idx + '-c' + compIdx)"
+                      @mouseleave="clearHover"
+                    >
                       <div class="component-header">
                         <strong>{{ comp.type }}</strong>: {{ comp.value }}
                       </div>
                       <div v-if="comp.translation || comp.details" class="component-details">
-                        <span v-if="comp.translation" class="detail-item">
+                        <span v-if="comp.translation" class="detail-item"
+                          :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"
+                        >
                           <em>{{ comp.translation }}</em>
                         </span>
-                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item"> {{ formatDetails(comp.details) }}
+                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item" :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"> {{ formatDetails(comp.details) }}
                         </span>
                       </div>
                     </div>
@@ -139,6 +160,7 @@ export default {
       loading: false,
       error: null,
       apiHealth: 'checking'
+      ,hovered: null
     }
   },
   computed: {
@@ -181,6 +203,55 @@ export default {
       } catch (e) {
         return iso
       }
+    },
+    // Hover/state helpers
+    setHover(id) {
+      this.hovered = id
+    },
+    clearHover() {
+      this.hovered = null
+    },
+    // Build sentence segments and tag substrings that match component values.
+    getSentenceSegments(sentenceData, sentenceIdx) {
+      const text = sentenceData.sentence || ''
+      const comps = sentenceData.components || []
+      if (!comps.length) return [{ text }]
+
+      const lower = text.toLowerCase()
+      const ranges = []
+
+      // Find non-overlapping occurrences for each component value
+      comps.forEach((comp, compIdx) => {
+        const val = (comp.value || '').toString()
+        if (!val) return
+        const search = val.toLowerCase()
+        let start = 0
+        while (true) {
+          const pos = lower.indexOf(search, start)
+          if (pos === -1) break
+          const end = pos + search.length
+          // check overlap
+          const overlap = ranges.some(r => !(end <= r.start || pos >= r.end))
+          if (!overlap) {
+            ranges.push({ start: pos, end, compIdx })
+            break
+          }
+          start = pos + 1
+        }
+      })
+
+      if (!ranges.length) return [{ text }]
+
+      ranges.sort((a, b) => a.start - b.start)
+      const parts = []
+      let last = 0
+      ranges.forEach(r => {
+        if (r.start > last) parts.push({ text: text.slice(last, r.start) })
+        parts.push({ text: text.slice(r.start, r.end), compId: 's' + sentenceIdx + '-c' + r.compIdx })
+        last = r.end
+      })
+      if (last < text.length) parts.push({ text: text.slice(last) })
+      return parts
     },
     toggleCollapse(idx) {
         this.sentences[idx].collapsed = !this.sentences[idx].collapsed
@@ -563,6 +634,9 @@ export default {
   color: #555;
   line-height: 1.4;
 }
+.detail-item.highlight {
+  color: #f9f9f9;
+}
 
 .no-components {
   color: #999;
@@ -634,6 +708,26 @@ export default {
   align-items: center;
   gap: 10px;
   margin-top: 8px;
+}
+.sentence-word {
+  display: inline-block;
+}
+
+.sentence-word.highlight {
+  background: rgba(234, 102, 225, 0.14);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.component-tag.highlight {
+  box-shadow: 0 6px 18px rgba(234, 102, 179, 0.12);
+  transform: translateY(-2px);
+  color: #edd0e9;
+  background: #8984e5;
+}
+
+.component-tag.highlight strong {
+  color: #e6dae7;
 }
 
 .completed-badge {
