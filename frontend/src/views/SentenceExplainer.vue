@@ -36,7 +36,7 @@
           <h2>Grammatical Analysis</h2>
           
           <div v-if="loading" class="loading-state">
-            <p>🔄 Analyzing text...</p>
+            <p>🔄 Analyzing text... <strong>{{ pendingCount }} / {{ totalSentences }} remaining</strong></p>
           </div>
 
           <div v-else-if="error" class="error-state">
@@ -51,7 +51,7 @@
             <!-- Sentences breakdown -->
             <div class="analysis-group">
               <h3>Sentences Found: {{ sentences.length }}</h3>
-              <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
+                    <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
                 <div class="sentence-text">{{ sentenceData.sentence }}
                 <button class="collapse-btn" @click="toggleCollapse(idx)">
                           {{ sentenceData.collapsed ? 'Show details ▼' : 'Hide details ▲' }}
@@ -70,10 +70,14 @@
                 <!-- Success state -->
                 <div v-else>
 
-                  <p v-if="sentenceData.sentence_translation" class="sentence-translation" >
-                    📝 {{ sentenceData.sentence_translation }}
+                    <p v-if="sentenceData.sentence_translation" class="sentence-translation">
+                      📝 {{ sentenceData.sentence_translation }}
                   
                   </p>
+                    <div class="sentence-meta">
+                      <span v-if="sentenceData.justCompleted" class="completed-badge">✓</span>
+                      <span v-if="sentenceData.completedAt" class="completed-time">Completed at {{ formatTime(sentenceData.completedAt) }}</span>
+                    </div>
                   <div v-if="sentenceData.components.length > 0" v-show="!sentenceData.collapsed" class="components-list">
                     <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag">
                       <div class="component-header">
@@ -83,8 +87,7 @@
                         <span v-if="comp.translation" class="detail-item">
                           <em>{{ comp.translation }}</em>
                         </span>
-                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item">
-                          {{ formatDetails(comp.details) }}
+                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item"> {{ formatDetails(comp.details) }}
                         </span>
                       </div>
                     </div>
@@ -146,6 +149,14 @@ export default {
     totalComponents() {
       return this.sentences.reduce((total, sentence) => total + sentence.components.length, 0)
     }
+    ,
+    // Number of sentences still being processed
+    pendingCount() {
+      return this.sentences.filter(s => s.loading).length
+    },
+    totalSentences() {
+      return this.sentences.length
+    }
   },
   methods: {
     formatDetails(details) {
@@ -162,6 +173,14 @@ export default {
           return `${formattedKey}: ${value}`
         })
         .join(' • ')
+    },
+    formatTime(iso) {
+      try {
+        const d = new Date(iso)
+        return d.toLocaleTimeString()
+      } catch (e) {
+        return iso
+      }
     },
     toggleCollapse(idx) {
         this.sentences[idx].collapsed = !this.sentences[idx].collapsed
@@ -207,6 +226,7 @@ export default {
           }))
         }
         
+        
         // Step 3: Send ALL requests in parallel and update UI as each response arrives
         const analyzePromises = sentences.map((sentence, index) =>
           axios.post(`${API_BASE_URL}/api/analyze-sentence`, { sentence }, { timeout: 100000 })
@@ -222,8 +242,19 @@ export default {
                 components: data.components ?? [],
                 collapsed,
                 loading: false,
-                error: null
+                error: null,
+                // Add completion metadata for UI
+                completedAt: new Date().toISOString(),
+                justCompleted: true
               })
+              this.loading = false
+
+              // Remove the transient justCompleted flag after a short animation window
+              setTimeout(() => {
+                if (this.analysis && this.analysis.sentences && this.analysis.sentences[index]) {
+                  this.analysis.sentences[index].justCompleted = false
+                }
+              }, 1400)
             })
             .catch(error => {
               const message = error.response?.data?.detail || error.message || 'Unknown error'
@@ -596,6 +627,39 @@ export default {
   color: #ff4d4f;
   font-size: 13px;
   margin: 0;
+}
+
+.sentence-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.completed-badge {
+  display: inline-block;
+  background: #52c41a;
+  color: white;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  text-align: center;
+  line-height: 26px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(82,196,26,0.18);
+  transform: scale(0.85);
+  animation: pop 0.45s ease-out forwards;
+}
+
+.completed-time {
+  font-size: 12px;
+  color: #666;
+}
+
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0 }
+  60% { transform: scale(1.08); opacity: 1 }
+  100% { transform: scale(1); }
 }
 
 @keyframes pulse {
