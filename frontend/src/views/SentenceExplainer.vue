@@ -207,33 +207,37 @@ export default {
           }))
         }
         
-        // Step 3: Send ALL requests in parallel
+        // Step 3: Send ALL requests in parallel and update UI as each response arrives
         const analyzePromises = sentences.map((sentence, index) =>
-          axios.post(`${API_BASE_URL}/api/analyze-sentence`, { sentence }, { timeout: 25000 })
-            .then(response => ({
-              index,
-              data: response.data,
-              status: 'success'
-            }))
-            .catch(error => ({
-              index,
-              error: error.response?.data?.detail || error.message,
-              status: 'error'
-            }))
+          axios.post(`${API_BASE_URL}/api/analyze-sentence`, { sentence }, { timeout: 100000 })
+            .then(response => {
+              const data = response.data || {}
+              // preserve the user's collapsed state if present
+              const collapsed = this.analysis.sentences[index]?.collapsed ?? true
+
+              // Replace the slot for this sentence so Vue reactivity picks up the change
+              this.analysis.sentences.splice(index, 1, {
+                sentence: data.sentence ?? sentence,
+                sentence_translation: data.sentence_translation ?? '',
+                components: data.components ?? [],
+                collapsed,
+                loading: false,
+                error: null
+              })
+            })
+            .catch(error => {
+              const message = error.response?.data?.detail || error.message || 'Unknown error'
+              if (this.analysis && this.analysis.sentences && this.analysis.sentences[index]) {
+                this.analysis.sentences[index].error = message
+                this.analysis.sentences[index].loading = false
+              }
+            })
         )
-        
-        // Step 4: Wait for all to complete
-        const results = await Promise.all(analyzePromises)
-        
-        // Step 5: Update UI with results as they're processed
-        results.forEach(result => {
-          if (result.status === 'success') {
-            this.analysis.sentences[result.index] = result.data
-          } else {
-            this.analysis.sentences[result.index].error = result.error
-            this.analysis.sentences[result.index].loading = false
-          }
-        })
+
+        // Step 4: Wait for all to settle so we can clear the overall loading indicator.
+        // Note: individual updates already occurred in the per-promise handlers above,
+        // so the UI will show results progressively as responses arrive.
+        await Promise.allSettled(analyzePromises)
         
       } catch (err) {
         console.error('Analysis error:', err)

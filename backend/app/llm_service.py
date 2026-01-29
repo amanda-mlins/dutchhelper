@@ -100,7 +100,7 @@ class OpenRouterService:
             result = response.json()
             content = result["choices"][0]["message"]["content"]
             
-            logger.debug(f"[OpenRouter] LLM response: {content}")  # Full content
+            logger.debug(f"[OpenRouter] LLM response sample: {content[:100]}")  # Sample content
             
             # Parse the LLM response
             components, sentence_translation = OpenRouterService._parse_llm_response(content, sentence)
@@ -177,7 +177,7 @@ Return only the JSON object, no other text. Make sure JSON is properly formatted
                 return [], None
             
             json_str = content[json_start:json_end]
-            logger.debug(f"[OpenRouter] Extracted JSON: {json_str}...")
+            logger.debug(f"[OpenRouter] Extracted JSON sample: {json_str[:15]}...")
             
             response_data = json.loads(json_str)
             logger.debug(f"[OpenRouter] Parsed response data")
