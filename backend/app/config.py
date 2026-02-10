@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     DEBUG: bool = True
+    
+    # Logging Settings
+    LOG_LEVEL: str = "INFO"  # Set to "DEBUG" for verbose logging
 
     # LLM Settings
     OPENROUTER_API_KEY: Optional[str] = None

@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import router
 from app.config import settings
 
-# Configure logging
+# Configure logging based on LOG_LEVEL setting
+log_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)

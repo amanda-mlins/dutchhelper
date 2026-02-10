@@ -94,7 +94,8 @@ class OpenRouterService:
         
         logger.info(f"[OpenRouter] Analyzing sentence: {sentence}")
         prompt = OpenRouterService._build_analysis_prompt(sentence)
-        logger.debug(f"[OpenRouter] Prompt: {prompt[:200]}...")  # First 200 chars
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"[OpenRouter] Prompt length: {len(prompt)} chars")
         
         client = OpenRouterService.get_client()
         logger.info(f"[OpenRouter] Sending request to {settings.OPENROUTER_BASE_URL} with model: {settings.LLM_MODEL}")
@@ -123,14 +124,16 @@ class OpenRouterService:
         result = response.json()
         content = result["choices"][0]["message"]["content"]
         
-        logger.debug(f"[OpenRouter] LLM response sample: {content[:100]}")  # Sample content
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"[OpenRouter] LLM response received ({len(content)} chars)")
         
         # Parse the LLM response
         components, sentence_translation = OpenRouterService._parse_llm_response(content, sentence)
         
         logger.info(f"[OpenRouter] Extracted {len(components)} components from sentence")
-        for i, component in enumerate(components, 1):
-            logger.debug(f"  [{i}] {component.type}: '{component.value}'")
+        if logger.isEnabledFor(logging.DEBUG):
+            for component in components:
+                logger.debug(f"  - {component.type}: {component.value}")
         
         # Create the result
         analysis_result = SentenceAnalysis(
@@ -203,22 +206,22 @@ Return only the JSON object, no other text. Make sure JSON is properly formatted
             json_end = content.rfind('}') + 1
             
             if json_start == -1 or json_end == 0:
-                logger.warning(f"[OpenRouter] Could not find JSON in LLM response: {content}")
+                logger.warning(f"[OpenRouter] Could not find JSON in LLM response")
                 return [], None
             
             json_str = content[json_start:json_end]
-            logger.debug(f"[OpenRouter] Extracted JSON sample: {json_str[:15]}...")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"[OpenRouter] Extracted JSON ({len(json_str)} chars)")
             
             response_data = json.loads(json_str)
-            logger.debug(f"[OpenRouter] Parsed response data")
             
             # Extract sentence translation
             sentence_translation = response_data.get("sentence_translation")
-            logger.info(f"[OpenRouter] Sentence translation: {sentence_translation}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"[OpenRouter] Translation: {sentence_translation}")
             
             # Extract components
             components_data = response_data.get("components", [])
-            logger.debug(f"[OpenRouter] Parsed {len(components_data)} components from JSON")
             
             components = []
             for item in components_data:
@@ -233,12 +236,10 @@ Return only the JSON object, no other text. Make sure JSON is properly formatted
                         )
                     )
             
-            logger.debug(f"[OpenRouter] Successfully created {len(components)} SentenceComponent objects")
             return components, sentence_translation
             
         except json.JSONDecodeError as e:
             logger.warning(f"[OpenRouter] Failed to parse JSON from LLM response: {e}")
-            logger.debug(f"[OpenRouter] Content that failed to parse: {content}")
             return [], None
     
     @staticmethod
