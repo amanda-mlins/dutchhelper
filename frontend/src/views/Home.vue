@@ -16,7 +16,12 @@
         <div class="tools-grid">
           <router-link to="/sentence-explainer" class="tool-card">
             <h3>📖 Sentence Explainer</h3>
-            <p>Break down Dutch sentences into grammatical components: subjects, verbs, objects, adjectives, and more.</p>
+            <p>Break down Dutch sentences into grammatical components: subjects, verbs, objects, adjectives, and more.
+            </p>
+          </router-link>
+          <router-link to="/conjugator" class="tool-card">
+            <h3>🔤 Verb Conjugator</h3>
+            <p>Learn how to conjugate Dutch verbs across all tenses and persons with real-world examples.</p>
           </router-link>
         </div>
       </section>

@@ -7,10 +7,13 @@ from app.schemas import (
     AnalyzeSentenceRequest, 
     TextAnalysisResponse, 
     SentenceAnalysis,
-    SplitSentencesResponse
+    SplitSentencesResponse,
+    ConjugateVerbRequest,
+    ConjugateVerbResponse
 )
 from app.services import SentenceAnalyzerService
 from app.nlp_service import NLPService
+from app.verb_conjugation_service import VerbConjugationService
 from app.exceptions import ValidationError, ProcessingError
 
 logger = logging.getLogger(__name__)
@@ -145,3 +148,86 @@ async def analyze_sentence(request: AnalyzeSentenceRequest):
     except Exception as e:
         logger.error(f"[Parallel] Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/conjugate", response_model=ConjugateVerbResponse)
+async def conjugate_verb(request: ConjugateVerbRequest):
+    """
+    Conjugate a Dutch verb across all tenses and persons.
+    
+    First tries to find the verb in the local database (~15 common verbs).
+    If not found, uses OpenRouter LLM to generate the conjugation.
+    
+    Args:
+        request: ConjugateVerbRequest containing the verb to conjugate
+        
+    Returns:
+        ConjugateVerbResponse with conjugations, translations, and examples
+        
+    Raises:
+        HTTPException: If verb cannot be conjugated or input is invalid
+    """
+    try:
+        if not request.verb or not request.verb.strip():
+            raise HTTPException(status_code=400, detail="Verb cannot be empty")
+        
+        verb = request.verb.strip().lower()
+        logger.info(f"Conjugating verb (with LLM fallback): {verb}")
+        
+        # Use the async method with LLM fallback
+        conjugation_data = await VerbConjugationService.conjugate_verb_with_llm(verb)
+        
+        logger.info(f"Successfully conjugated verb: {verb}")
+        
+        # Return the data as ConjugateVerbResponse
+        return ConjugateVerbResponse(**conjugation_data)
+        
+    except ProcessingError as e:
+        logger.error(f"Failed to conjugate verb: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error conjugating verb: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to conjugate verb")
+
+@router.post("/conjugate-database", response_model=ConjugateVerbResponse)
+async def conjugate_verb_database_only(request: ConjugateVerbRequest):
+    """
+    Conjugate a Dutch verb from the local database only (no LLM).
+    
+    This endpoint only uses the local database and does not call the LLM.
+    Useful for fast responses without API calls.
+    
+    Args:
+        request: ConjugateVerbRequest containing the verb to conjugate
+        
+    Returns:
+        ConjugateVerbResponse with conjugations, translations, and examples
+        
+    Raises:
+        HTTPException: If verb is not found in database
+    """
+    try:
+        if not request.verb or not request.verb.strip():
+            raise HTTPException(status_code=400, detail="Verb cannot be empty")
+        
+        verb = request.verb.strip().lower()
+        logger.info(f"Conjugating verb from database: {verb}")
+        
+        # Get conjugation data from service (database only, no LLM)
+        conjugation_data = VerbConjugationService.conjugate_verb(verb)
+        
+        logger.info(f"Successfully conjugated verb from database: {verb}")
+        
+        # Return the data as ConjugateVerbResponse
+        return ConjugateVerbResponse(**conjugation_data)
+        
+    except KeyError as e:
+        logger.error(f"Verb not found in database: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error conjugating verb: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to conjugate verb")
+

@@ -39,3 +39,32 @@ class TextAnalysisResponse(BaseModel):
     original_text: str
     sentences: List[SentenceAnalysis] = []
     summary: Optional[dict] = None  # For future use with additional stats
+
+# Verb Conjugation Models
+class VerbConjugationForm(BaseModel):
+    """Single conjugation form for a person"""
+    person: str
+    conjugation: str
+
+class VerbTense(BaseModel):
+    """Verb tense with all conjugations"""
+    dutchName: str
+    englishName: Optional[str] = None
+    forms: List[VerbConjugationForm] = []
+
+class VerbExample(BaseModel):
+    """Usage example of a verb"""
+    dutch: str
+    english: str
+    tense: Optional[str] = None
+
+class ConjugateVerbRequest(BaseModel):
+    """Request to conjugate a verb"""
+    verb: str
+
+class ConjugateVerbResponse(BaseModel):
+    """Response with verb conjugation data"""
+    infinitive: str
+    englishTranslation: str
+    tenses: List[VerbTense] = []
+    examples: List[VerbExample] = []

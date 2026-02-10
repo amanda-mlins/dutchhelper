@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # LLM Settings
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
-    LLM_MODEL: str = "mistralai/mistral-nemo"
+    LLM_MODEL: str = "google/gemini-2.5-flash-lite-preview-09-2025"
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
