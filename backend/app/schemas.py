@@ -12,15 +12,22 @@ class SentenceComponent(BaseModel):
     type: str  # e.g., "subject", "verb", "object", "adjective", "article", "noun"
     value: str
     position: int  # Starting position in the sentence
+    translation: Optional[str] = None
+    details: Optional[dict] = None
 
 class SentenceAnalysis(BaseModel):
     """Analysis of a single sentence"""
     sentence: str
+    sentence_translation: Optional[str] = None
     components: List[SentenceComponent] = []
 
 class TextAnalysisRequest(BaseModel):
     """Request to analyze Dutch text"""
     text: str
+
+class AnalyzeSentenceRequest(BaseModel):
+    """Request to analyze a single sentence - for parallel frontend processing"""
+    sentence: str
 
 class TextAnalysisResponse(BaseModel):
     """Response with complete text analysis"""

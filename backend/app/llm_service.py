@@ -3,21 +3,35 @@ import logging
 import os
 import httpx
 import json
-from typing import Optional
-from app.models import SentenceComponent, SentenceAnalysis
+from typing import Optional, List
+from app.schemas import SentenceComponent, SentenceAnalysis
 from app.exceptions import ProcessingError
+from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "mistralai/mistral-nemo"
 
 class OpenRouterService:
     """Service for interacting with OpenRouter LLM"""
     
+    _client: Optional[httpx.AsyncClient] = None
+
+    @classmethod
+    def get_client(cls) -> httpx.AsyncClient:
+        """Get or create a singleton httpx client"""
+        if cls._client is None or cls._client.is_closed:
+            cls._client = httpx.AsyncClient(
+                base_url="https://openrouter.ai/api/v1",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                    "HTTP-Referer": "https://dutchhelper.ai",
+                    "X-Title": "DutchHelper",
+                },
+                timeout=httpx.Timeout(60.0)
+            )
+        return cls._client
+
     @staticmethod
-    async def analyze_dutch_text(text: str) -> list[SentenceAnalysis]:
+    async def analyze_dutch_text(text: str) -> List[SentenceAnalysis]:
         """
         Analyze Dutch text using OpenRouter LLM.
         
@@ -30,7 +44,7 @@ class OpenRouterService:
         Raises:
             ProcessingError: If LLM call fails
         """
-        if not OPENROUTER_API_KEY:
+        if not settings.OPENROUTER_API_KEY:
             raise ProcessingError("OPENROUTER_API_KEY environment variable not set")
         
         try:
@@ -40,15 +54,13 @@ class OpenRouterService:
             sentences = OpenRouterService._split_sentences(text)
             logger.info(f"[OpenRouter] Split text into {len(sentences)} sentence(s)")
             
-            analyzed_sentences = []
-            
-            for idx, sentence in enumerate(sentences, 1):
-                logger.info(f"[OpenRouter] Processing sentence {idx}/{len(sentences)}")
-                analysis = await OpenRouterService._analyze_sentence(sentence)
-                analyzed_sentences.append(analysis)
+            import asyncio
+            # Process sentences in parallel
+            tasks = [OpenRouterService._analyze_sentence(s) for s in sentences]
+            analyzed_sentences = await asyncio.gather(*tasks)
             
             logger.info(f"[OpenRouter] Analysis complete. Processed {len(analyzed_sentences)} sentences")
-            return analyzed_sentences
+            return list(analyzed_sentences)
             
         except Exception as e:
             logger.error(f"[OpenRouter] Error analyzing text with OpenRouter: {str(e)}", exc_info=True)
@@ -69,51 +81,47 @@ class OpenRouterService:
         prompt = OpenRouterService._build_analysis_prompt(sentence)
         logger.debug(f"[OpenRouter] Prompt: {prompt[:200]}...")  # First 200 chars
         
-        async with httpx.AsyncClient() as client:
-            logger.info(f"[OpenRouter] Sending request to {OPENROUTER_BASE_URL} with model: {MODEL}")
-            response = await client.post(
-                OPENROUTER_BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "HTTP-Referer": "https://dutchhelper.ai",
-                    "X-Title": "DutchHelper",
-                },
-                json={
-                    "model": MODEL,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "temperature": 0.3,  # Low temperature for consistent results
-                    "max_tokens": 2000,
-                },
-            )
-            
-            logger.info(f"[OpenRouter] Response status: {response.status_code}")
-            
-            if response.status_code != 200:
-                logger.error(f"[OpenRouter] API error: {response.status_code} - {response.text}")
-                raise ProcessingError(f"OpenRouter API error: {response.status_code}")
-            
-            result = response.json()
-            content = result["choices"][0]["message"]["content"]
-            
-            logger.debug(f"[OpenRouter] LLM response sample: {content[:100]}")  # Sample content
-            
-            # Parse the LLM response
-            components, sentence_translation = OpenRouterService._parse_llm_response(content, sentence)
-            
-            logger.info(f"[OpenRouter] Extracted {len(components)} components from sentence")
-            for i, component in enumerate(components, 1):
-                logger.debug(f"  [{i}] {component.type}: '{component.value}'")
-            
-            return SentenceAnalysis(
-                sentence=sentence,
-                sentence_translation=sentence_translation,
-                components=components
-            )
+        client = OpenRouterService.get_client()
+        logger.info(f"[OpenRouter] Sending request to {settings.OPENROUTER_BASE_URL} with model: {settings.LLM_MODEL}")
+        
+        response = await client.post(
+            "/chat/completions",
+            json={
+                "model": settings.LLM_MODEL,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.3,  # Low temperature for consistent results
+                "max_tokens": 2000,
+            },
+        )
+        
+        logger.info(f"[OpenRouter] Response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            logger.error(f"[OpenRouter] API error: {response.status_code} - {response.text}")
+            raise ProcessingError(f"OpenRouter API error: {response.status_code}")
+        
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        
+        logger.debug(f"[OpenRouter] LLM response sample: {content[:100]}")  # Sample content
+        
+        # Parse the LLM response
+        components, sentence_translation = OpenRouterService._parse_llm_response(content, sentence)
+        
+        logger.info(f"[OpenRouter] Extracted {len(components)} components from sentence")
+        for i, component in enumerate(components, 1):
+            logger.debug(f"  [{i}] {component.type}: '{component.value}'")
+        
+        return SentenceAnalysis(
+            sentence=sentence,
+            sentence_translation=sentence_translation,
+            components=components
+        )
     
     @staticmethod
     def _build_analysis_prompt(sentence: str) -> str:

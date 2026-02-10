@@ -1,7 +1,13 @@
 """API routes for DutchHelper"""
 import logging
 from fastapi import APIRouter, HTTPException
-from app.models import Message, TextAnalysisRequest, AnalyzeSentenceRequest, TextAnalysisResponse, SentenceAnalysis
+from app.schemas import (
+    Message, 
+    TextAnalysisRequest, 
+    AnalyzeSentenceRequest, 
+    TextAnalysisResponse, 
+    SentenceAnalysis
+)
 from app.services import SentenceAnalyzerService
 from app.exceptions import ValidationError, ProcessingError
 
