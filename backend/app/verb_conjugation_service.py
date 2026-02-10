@@ -650,8 +650,10 @@ class VerbConjugationService:
         """
         Conjugate a Dutch verb with LLM fallback for unknown verbs.
         
-        First tries to get the conjugation from the local database.
-        If not found, uses OpenRouter LLM to generate the conjugation.
+        Lookup order:
+        1. Cache (if available and not expired)
+        2. Local database (~15 common verbs)
+        3. OpenRouter LLM (for unknown verbs)
         
         Args:
             verb: The infinitive form of a Dutch verb
@@ -662,23 +664,35 @@ class VerbConjugationService:
         Raises:
             ProcessingError: If both database lookup and LLM generation fail
         """
-        verb_lower = verb.lower().strip()
-        
-        # Try database first
-        if verb_lower in VerbConjugationService.VERB_DATABASE:
-            logger.info(f"Found '{verb_lower}' in database")
-            return VerbConjugationService.VERB_DATABASE[verb_lower]
-        
-        # Fallback to LLM
-        logger.info(f"Verb '{verb_lower}' not in database, using LLM to conjugate")
-        
-        # Import here to avoid circular imports
+        from app.cache_service import CacheManager
         from app.llm_service import OpenRouterService
         from app.exceptions import ProcessingError
+        
+        verb_lower = verb.lower().strip()
+        
+        # Step 1: Check cache first
+        cache_key = CacheManager.generate_key("conjugate", verb_lower)
+        cached_result = CacheManager.get(cache_key)
+        if cached_result:
+            logger.info(f"Cache hit for verb '{verb_lower}' - returning cached conjugation")
+            return cached_result
+        
+        # Step 2: Try database
+        if verb_lower in VerbConjugationService.VERB_DATABASE:
+            result = VerbConjugationService.VERB_DATABASE[verb_lower]
+            # Cache database results too (they won't change)
+            CacheManager.set(cache_key, result)
+            logger.info(f"Found '{verb_lower}' in database (cached)")
+            return result
+        
+        # Step 3: Fallback to LLM
+        logger.info(f"Verb '{verb_lower}' not in database, using LLM to conjugate")
         
         try:
             conjugation = await OpenRouterService.conjugate_dutch_verb(verb_lower)
             logger.info(f"Successfully generated conjugation for '{verb_lower}' via LLM")
+            # Cache the LLM result
+            CacheManager.set(cache_key, conjugation)
             return conjugation
         except Exception as e:
             logger.error(f"Failed to conjugate '{verb_lower}': {str(e)}")

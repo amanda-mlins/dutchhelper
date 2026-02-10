@@ -72,12 +72,26 @@ class OpenRouterService:
         """
         Analyze a single sentence for grammatical components using OpenRouter.
         
+        Uses caching to avoid re-analyzing the same sentences.
+        
         Args:
             sentence: Sentence to analyze
             
         Returns:
             SentenceAnalysis with extracted components
         """
+        from app.cache_service import CacheManager
+        
+        # Normalize sentence for caching (lowercase, stripped)
+        normalized_sentence = sentence.lower().strip()
+        cache_key = CacheManager.generate_key("sentence", normalized_sentence)
+        
+        # Check cache first
+        cached_result = CacheManager.get(cache_key)
+        if cached_result:
+            logger.info(f"[Cache] Hit for sentence: {sentence[:50]}... - returning cached analysis")
+            return cached_result
+        
         logger.info(f"[OpenRouter] Analyzing sentence: {sentence}")
         prompt = OpenRouterService._build_analysis_prompt(sentence)
         logger.debug(f"[OpenRouter] Prompt: {prompt[:200]}...")  # First 200 chars
@@ -118,11 +132,18 @@ class OpenRouterService:
         for i, component in enumerate(components, 1):
             logger.debug(f"  [{i}] {component.type}: '{component.value}'")
         
-        return SentenceAnalysis(
+        # Create the result
+        analysis_result = SentenceAnalysis(
             sentence=sentence,
             sentence_translation=sentence_translation,
             components=components
         )
+        
+        # Cache the result
+        CacheManager.set(cache_key, analysis_result)
+        logger.info(f"[Cache] Stored analysis for: {sentence[:50]}...")
+        
+        return analysis_result
     
     @staticmethod
     def _build_analysis_prompt(sentence: str) -> str:
