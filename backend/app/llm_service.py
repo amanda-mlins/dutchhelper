@@ -7,6 +7,7 @@ from typing import Optional, List
 from app.schemas import SentenceComponent, SentenceAnalysis
 from app.exceptions import ProcessingError
 from app.config import settings
+from app.nlp_service import NLPService
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,8 @@ class OpenRouterService:
         try:
             logger.info(f"[OpenRouter] Starting analysis of text: {text[:100]}...")
             
-            # Split text into sentences first
-            sentences = OpenRouterService._split_sentences(text)
+            # Use NLPService for robust sentence splitting
+            sentences = NLPService.split_sentences(text)
             logger.info(f"[OpenRouter] Split text into {len(sentences)} sentence(s)")
             
             import asyncio
@@ -220,6 +221,13 @@ Return only the JSON object, no other text. Make sure JSON is properly formatted
             return [], None
     
     @staticmethod
+    def _split_sentences(text: str) -> list[str]:
+        """
+        Split text into sentences using NLPService.
+        """
+        return NLPService.split_sentences(text)
+
+    @staticmethod
     def _is_valid_sentence(sentence: str) -> bool:
         """
         Check if a sentence is valid (contains at least one word).
@@ -245,28 +253,3 @@ Return only the JSON object, no other text. Make sure JSON is properly formatted
         else:
             logger.debug(f"[OpenRouter] Filtered out invalid sentence: '{sentence}'")
             return False
-    
-    @staticmethod
-    def _split_sentences(text: str) -> list[str]:
-        """
-        Split text into sentences and filter for valid ones.
-        
-        Args:
-            text: Text to split
-            
-        Returns:
-            List of valid sentences (containing at least one word)
-        """
-        import re
-        # Split by common sentence-ending punctuation
-        sentences = re.split(r'[.!?]+', text)
-        
-        # Clean and filter sentences
-        valid_sentences = [
-            s.strip() 
-            for s in sentences 
-            if s.strip() and OpenRouterService._is_valid_sentence(s.strip())
-        ]
-        
-        logger.debug(f"[OpenRouter] Split text into {len(valid_sentences)} valid sentence(s) from {len([s.strip() for s in sentences if s.strip()])} total")
-        return valid_sentences

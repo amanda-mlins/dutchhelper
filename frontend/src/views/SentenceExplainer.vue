@@ -13,28 +13,20 @@
       <div class="explainer-container">
         <div class="section input-section">
           <h2>Dutch Text</h2>
-          <textarea 
-            v-model="dutchText"
-            placeholder="Enter Dutch text here..."
-            class="textarea"
-          ></textarea>
+          <textarea v-model="dutchText" placeholder="Enter Dutch text here..." class="textarea"></textarea>
           <div class="controls">
             <div class="char-count">{{ dutchText.length }} characters</div>
-            <button 
-              @click="analyzeText" 
-              :disabled="!dutchText.trim() || loading"
-              class="analyze-button"
-            >
+            <button @click="analyzeText" :disabled="!dutchText.trim() || loading" class="analyze-button">
               {{ loading ? '🔄 Analyzing...' : '▶ Analyze' }}
             </button>
           </div>
         </div>
       </div>
-        <!-- Analysis Section -->
+      <!-- Analysis Section -->
       <div class="explainer-container">
         <div class="section analysis-section">
           <h2>Grammatical Analysis</h2>
-          
+
           <div v-if="loading" class="loading-state">
             <p>🔄 Analyzing text... <strong>{{ pendingCount }} / {{ totalSentences }} remaining</strong></p>
           </div>
@@ -51,64 +43,57 @@
             <!-- Sentences breakdown -->
             <div class="analysis-group">
               <h3>Sentences Found: {{ sentences.length }}</h3>
-                    <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
-                      <div class="sentence-text">
-                        <span v-for="(seg, sidx) in getSentenceSegments(sentenceData, idx)" :key="sidx">
-                          <span
-                            v-if="seg.compId"
-                            class="sentence-word"
-                            :class="{ highlight: hovered === seg.compId }"
-                            @mouseenter="setHover(seg.compId)"
-                            @mouseleave="clearHover"
-                          >
-                            {{ seg.text }}
-                          </span>
-                          <span v-else>{{ seg.text }}</span>
-                        </span>
-                        <button class="collapse-btn" @click="toggleCollapse(idx)">
-                          {{ sentenceData.collapsed ? 'Show details ▼' : 'Hide details ▲' }}
-                        </button>
-                      </div>
+              <div v-for="(sentenceData, idx) in sentences" :key="idx" class="sentence-block">
+                <div class="sentence-text">
+                  <span v-for="(seg, sidx) in getSentenceSegments(sentenceData, idx)" :key="sidx">
+                    <span v-if="seg.compId" class="sentence-word" :class="{ highlight: hovered === seg.compId }"
+                      @mouseenter="setHover(seg.compId)" @mouseleave="clearHover">
+                      {{ seg.text }}
+                    </span>
+                    <span v-else>{{ seg.text }}</span>
+                  </span>
+                  <button class="collapse-btn" @click="toggleCollapse(idx)">
+                    {{ sentenceData.collapsed ? 'Show details ▼' : 'Hide details ▲' }}
+                  </button>
+                </div>
                 <!-- Loading state for individual sentence -->
                 <div v-if="sentenceData.loading" class="sentence-loading">
                   <p>⏳ Analyzing this sentence...</p>
                 </div>
-                
+
                 <!-- Error state for individual sentence -->
                 <div v-else-if="sentenceData.error" class="sentence-error">
                   <p>❌ Failed to analyze: {{ sentenceData.error }}</p>
                 </div>
-                
+
                 <!-- Success state -->
                 <div v-else>
 
-                    <p v-if="sentenceData.sentence_translation" class="sentence-translation">
-                      📝 {{ sentenceData.sentence_translation }}
-                  
+                  <p v-if="sentenceData.sentence_translation" class="sentence-translation">
+                    📝 {{ sentenceData.sentence_translation }}
+
                   </p>
-                    <div class="sentence-meta">
-                      <span v-if="sentenceData.justCompleted" class="completed-badge">✓</span>
-                      <span v-if="sentenceData.completedAt" class="completed-time">Completed at {{ formatTime(sentenceData.completedAt) }}</span>
-                    </div>
-                  <div v-if="sentenceData.components.length > 0" v-show="!sentenceData.collapsed" class="components-list">
-                    <div
-                      v-for="(comp, compIdx) in sentenceData.components"
-                      :key="compIdx"
-                      class="component-tag"
+                  <div class="sentence-meta">
+                    <span v-if="sentenceData.justCompleted" class="completed-badge">✓</span>
+                    <span v-if="sentenceData.completedAt" class="completed-time">Completed at {{
+                      formatTime(sentenceData.completedAt) }}</span>
+                  </div>
+                  <div v-if="sentenceData.components.length > 0" v-show="!sentenceData.collapsed"
+                    class="components-list">
+                    <div v-for="(comp, compIdx) in sentenceData.components" :key="compIdx" class="component-tag"
                       :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"
-                      @mouseenter="setHover('s' + idx + '-c' + compIdx)"
-                      @mouseleave="clearHover"
-                    >
+                      @mouseenter="setHover('s' + idx + '-c' + compIdx)" @mouseleave="clearHover">
                       <div class="component-header">
                         <strong>{{ comp.type }}</strong>: {{ comp.value }}
                       </div>
                       <div v-if="comp.translation || comp.details" class="component-details">
                         <span v-if="comp.translation" class="detail-item"
-                          :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"
-                        >
+                          :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }">
                           <em>{{ comp.translation }}</em>
                         </span>
-                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item" :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"> {{ formatDetails(comp.details) }}
+                        <span v-if="comp.details && Object.keys(comp.details).length > 0" class="detail-item"
+                          :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"> {{
+                            formatDetails(comp.details) }}
                         </span>
                       </div>
                     </div>
@@ -160,7 +145,7 @@ export default {
       loading: false,
       error: null,
       apiHealth: 'checking'
-      ,hovered: null
+      , hovered: null
     }
   },
   computed: {
@@ -183,7 +168,7 @@ export default {
   methods: {
     formatDetails(details) {
       if (!details || typeof details !== 'object') return ''
-      
+
       return Object.entries(details)
         .map(([key, value]) => {
           // Format key (e.g., 'verb-tense' -> 'Verb Tense')
@@ -191,7 +176,7 @@ export default {
             .split('-')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ')
-          
+
           return `${formattedKey}: ${value}`
         })
         .join(' • ')
@@ -254,7 +239,7 @@ export default {
       return parts
     },
     toggleCollapse(idx) {
-        this.sentences[idx].collapsed = !this.sentences[idx].collapsed
+      this.sentences[idx].collapsed = !this.sentences[idx].collapsed
     },
     async checkApiHealth() {
       try {
@@ -275,17 +260,24 @@ export default {
       try {
         this.loading = true
         this.error = null
-        
-        // Step 1: Split and validate sentences on frontend
-        const sentences = prepareSentences(this.dutchText)
-        
+
+        // Step 1: Split sentences using backend's robust pysbd (fast, no LLM needed)
+        // This returns immediately so we can show sentences and start loading states
+        const splitResponse = await axios.post(`${API_BASE_URL}/api/split-sentences`,
+          { text: this.dutchText },
+          { timeout: 10000 }
+        )
+
+        const sentences = splitResponse.data.sentences || []
+
         if (sentences.length === 0) {
           this.error = 'No valid sentences found. Please enter text with actual words.'
           this.loading = false
           return
         }
-        
-        // Step 2: Initialize analysis structure with loading states
+
+        // Step 2: Initialize analysis structure with loading states for each sentence
+        // UI shows sentences immediately with "Analyzing..." state
         this.analysis = {
           sentences: sentences.map(sentence => ({
             sentence: sentence,
@@ -296,51 +288,47 @@ export default {
             error: null
           }))
         }
-        
-        
-        // Step 3: Send ALL requests in parallel and update UI as each response arrives
+        this.loading = false
+        // Step 3: Analyze each sentence in parallel and update UI as results arrive
+        // This provides the progressive/incremental UI updates the user expects
         const analyzePromises = sentences.map((sentence, index) =>
           axios.post(`${API_BASE_URL}/api/analyze-sentence`, { sentence }, { timeout: 100000 })
             .then(response => {
               const data = response.data || {}
-              // preserve the user's collapsed state if present
-              const collapsed = this.analysis.sentences[index]?.collapsed ?? true
+              // Update this specific sentence with the analysis result
+              if (this.analysis && this.analysis.sentences && this.analysis.sentences[index]) {
+                this.analysis.sentences.splice(index, 1, {
+                  sentence: data.sentence ?? sentence,
+                  sentence_translation: data.sentence_translation ?? '',
+                  components: data.components ?? [],
+                  collapsed: true,
+                  loading: false,
+                  error: null,
+                  completedAt: new Date().toISOString(),
+                  justCompleted: true
+                })
 
-              // Replace the slot for this sentence so Vue reactivity picks up the change
-              this.analysis.sentences.splice(index, 1, {
-                sentence: data.sentence ?? sentence,
-                sentence_translation: data.sentence_translation ?? '',
-                components: data.components ?? [],
-                collapsed,
-                loading: false,
-                error: null,
-                // Add completion metadata for UI
-                completedAt: new Date().toISOString(),
-                justCompleted: true
-              })
-              this.loading = false
-
-              // Remove the transient justCompleted flag after a short animation window
-              setTimeout(() => {
-                if (this.analysis && this.analysis.sentences && this.analysis.sentences[index]) {
-                  this.analysis.sentences[index].justCompleted = false
-                }
-              }, 1400)
+                // Remove the transient justCompleted flag after animation
+                setTimeout(() => {
+                  if (this.analysis?.sentences?.[index]) {
+                    this.analysis.sentences[index].justCompleted = false
+                  }
+                }, 1400)
+              }
             })
             .catch(error => {
               const message = error.response?.data?.detail || error.message || 'Unknown error'
-              if (this.analysis && this.analysis.sentences && this.analysis.sentences[index]) {
+              if (this.analysis?.sentences?.[index]) {
                 this.analysis.sentences[index].error = message
                 this.analysis.sentences[index].loading = false
               }
             })
         )
 
-        // Step 4: Wait for all to settle so we can clear the overall loading indicator.
-        // Note: individual updates already occurred in the per-promise handlers above,
-        // so the UI will show results progressively as responses arrive.
+        // Step 4: Wait for all analyses to complete
         await Promise.allSettled(analyzePromises)
-        
+
+        this.loading = false
       } catch (err) {
         console.error('Analysis error:', err)
         if (err.response?.data?.detail) {
@@ -634,6 +622,7 @@ export default {
   color: #555;
   line-height: 1.4;
 }
+
 .detail-item.highlight {
   color: #f9f9f9;
 }
@@ -709,6 +698,7 @@ export default {
   gap: 10px;
   margin-top: 8px;
 }
+
 .sentence-word {
   display: inline-block;
 }
@@ -740,7 +730,7 @@ export default {
   text-align: center;
   line-height: 26px;
   font-weight: 700;
-  box-shadow: 0 4px 10px rgba(82,196,26,0.18);
+  box-shadow: 0 4px 10px rgba(82, 196, 26, 0.18);
   transform: scale(0.85);
   animation: pop 0.45s ease-out forwards;
 }
@@ -751,15 +741,28 @@ export default {
 }
 
 @keyframes pop {
-  0% { transform: scale(0.6); opacity: 0 }
-  60% { transform: scale(1.08); opacity: 1 }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.6);
+    opacity: 0
+  }
+
+  60% {
+    transform: scale(1.08);
+    opacity: 1
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }

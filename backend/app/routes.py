@@ -6,9 +6,11 @@ from app.schemas import (
     TextAnalysisRequest, 
     AnalyzeSentenceRequest, 
     TextAnalysisResponse, 
-    SentenceAnalysis
+    SentenceAnalysis,
+    SplitSentencesResponse
 )
 from app.services import SentenceAnalyzerService
+from app.nlp_service import NLPService
 from app.exceptions import ValidationError, ProcessingError
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,46 @@ async def send_message(message: Message):
     """
     logger.info(f"Message received: {message.text}")
     return {"text": f"You said: {message.text}", "status": "received"}
+
+@router.post("/split-sentences", response_model=SplitSentencesResponse)
+async def split_sentences(request: TextAnalysisRequest):
+    """
+    Split Dutch text into sentences using robust pysbd library.
+    
+    This endpoint is fast (no LLM needed) and enables progressive UI updates.
+    The frontend receives split sentences immediately and can then analyze each
+    one in parallel using the /api/analyze-sentence endpoint.
+    
+    Args:
+        request: TextAnalysisRequest containing the Dutch text to split
+        
+    Returns:
+        SplitSentencesResponse with list of sentences
+        
+    Raises:
+        ValidationError: If text is empty or invalid
+    """
+    try:
+        if not request.text or not request.text.strip():
+            raise ValidationError("Text cannot be empty")
+        
+        logger.info(f"Splitting text: {request.text[:100]}...")
+        
+        sentences = NLPService.split_sentences(request.text)
+        
+        logger.info(f"Split complete: {len(sentences)} sentences found")
+        
+        return SplitSentencesResponse(
+            sentences=sentences,
+            count=len(sentences)
+        )
+        
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error splitting sentences: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to split sentences")
 
 @router.post("/analyze", response_model=TextAnalysisResponse)
 async def analyze_text(request: TextAnalysisRequest):

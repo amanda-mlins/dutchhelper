@@ -5,15 +5,25 @@
 
 /**
  * Split text into sentences by common sentence-ending punctuation
+ * NOTE: This is a basic client-side split. The backend uses pysbd for robust splitting
+ * that handles Dutch abbreviations and decimal numbers correctly.
  * @param {string} text - The text to split
  * @returns {string[]} Array of sentence fragments
  */
 export function splitSentences(text) {
-    // Split by common sentence-ending punctuation (.!?)
-    const sentences = text.split(/[.!?]+/)
-        .map(s => s.trim())
-        .filter(Boolean)
-    return sentences
+    // Note: For robust sentence splitting, rely on the backend's pysbd service
+    // which correctly handles:
+    // - Dutch abbreviations (a.u.b., dr., drs., etc.)
+    // - Decimal numbers (20.000, 3,14, etc.)
+    // - Complex punctuation (!?, ..., etc.)
+    //
+    // This frontend function is kept for backwards compatibility but should not
+    // be the primary means of splitting sentences.
+    // Instead, send the entire text to the backend and let it handle splitting.
+
+    // For now, return the text as a single item to be processed by backend
+    // This ensures pysbd's robust splitting is used
+    return [text]
 }
 
 /**

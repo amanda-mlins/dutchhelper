@@ -29,6 +29,11 @@ class AnalyzeSentenceRequest(BaseModel):
     """Request to analyze a single sentence - for parallel frontend processing"""
     sentence: str
 
+class SplitSentencesResponse(BaseModel):
+    """Response with just the split sentences (for progressive UI updates)"""
+    sentences: List[str] = []
+    count: int = 0
+
 class TextAnalysisResponse(BaseModel):
     """Response with complete text analysis"""
     original_text: str
