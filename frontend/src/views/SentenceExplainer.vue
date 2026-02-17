@@ -70,8 +70,11 @@
                 <div v-else>
 
                   <p v-if="sentenceData.sentence_translation" class="sentence-translation">
-                    📝 {{ sentenceData.sentence_translation }}
-
+                    📝
+                    <span v-for="(seg, tsidx) in getTranslationSegments(sentenceData, idx)" :key="tsidx"
+                      :class="{ 'translation-highlight': seg.compId && hovered === seg.compId }">
+                      {{ seg.text }}
+                    </span>
                   </p>
                   <div class="sentence-meta">
                     <span v-if="sentenceData.justCompleted" class="completed-badge">✓</span>
@@ -84,7 +87,13 @@
                       :class="{ highlight: hovered === ('s' + idx + '-c' + compIdx) }"
                       @mouseenter="setHover('s' + idx + '-c' + compIdx)" @mouseleave="clearHover">
                       <div class="component-header">
-                        <strong>{{ comp.type }}</strong>: {{ comp.value }}
+                        <strong>{{ comp.type }}</strong>:
+                        <router-link v-if="comp.type === 'verb'"
+                          :to="{ name: 'ConjugatorWithVerb', params: { verb: comp.value } }" class="verb-link"
+                          title="Click to view verb conjugations">
+                          {{ comp.value }}
+                        </router-link>
+                        <span v-else>{{ comp.value }}</span>
                       </div>
                       <div v-if="comp.translation || comp.details" class="component-details">
                         <span v-if="comp.translation" class="detail-item"
@@ -236,6 +245,54 @@ export default {
         last = r.end
       })
       if (last < text.length) parts.push({ text: text.slice(last) })
+      return parts
+    },
+    getTranslationSegments(sentenceData, sentenceIdx) {
+      const translation = sentenceData.sentence_translation || ''
+      const comps = sentenceData.components || []
+      if (!comps.length) return [{ text: translation }]
+
+      // Build a map of component index to its translation
+      const compTranslations = {}
+      comps.forEach((comp, compIdx) => {
+        if (comp.translation) {
+          compTranslations[compIdx] = comp.translation.toLowerCase()
+        }
+      })
+
+      // Find non-overlapping occurrences of component translations in the translation text
+      const translationLower = translation.toLowerCase()
+      const ranges = []
+
+      Object.entries(compTranslations).forEach(([compIdx, compTranslation]) => {
+        const search = compTranslation.trim()
+        if (!search) return
+        let start = 0
+        while (true) {
+          const pos = translationLower.indexOf(search, start)
+          if (pos === -1) break
+          const end = pos + search.length
+          // check overlap
+          const overlap = ranges.some(r => !(end <= r.start || pos >= r.end))
+          if (!overlap) {
+            ranges.push({ start: pos, end, compIdx })
+            break
+          }
+          start = pos + 1
+        }
+      })
+
+      if (!ranges.length) return [{ text: translation }]
+
+      ranges.sort((a, b) => a.start - b.start)
+      const parts = []
+      let last = 0
+      ranges.forEach(r => {
+        if (r.start > last) parts.push({ text: translation.slice(last, r.start) })
+        parts.push({ text: translation.slice(r.start, r.end), compId: 's' + sentenceIdx + '-c' + r.compIdx })
+        last = r.end
+      })
+      if (last < translation.length) parts.push({ text: translation.slice(last) })
       return parts
     },
     toggleCollapse(idx) {
@@ -581,6 +638,14 @@ export default {
   border-left: 3px solid #667eea;
 }
 
+.translation-highlight {
+  background: rgba(234, 102, 225, 0.25);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
 .components-list {
   display: flex;
   flex-wrap: wrap;
@@ -766,6 +831,46 @@ export default {
   50% {
     opacity: 0.7;
   }
+}
+
+/* Verb link styling */
+.verb-link {
+  color: white;
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-block;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(123, 58, 237, 0.25);
+  position: relative;
+  font-size: 13px;
+}
+
+.verb-link::after {
+  content: ' ➜';
+  font-size: 12px;
+  margin-left: 4px;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+}
+
+.verb-link:hover {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  box-shadow: 0 6px 16px rgba(123, 58, 237, 0.4);
+  transform: translateY(-1px);
+}
+
+.verb-link:hover::after {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.verb-link:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(123, 58, 237, 0.25);
 }
 
 /* Responsive design */

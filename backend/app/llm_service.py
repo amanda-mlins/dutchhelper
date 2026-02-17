@@ -235,6 +235,13 @@ CRITICAL INSTRUCTIONS:
 4. Return ONLY valid JSON that matches the schema exactly
 5. All required fields MUST be present
 6. The "type" field MUST be one of the allowed values only
+7. The sentence translation and each individual component translation should match, you can give alternative translations for the word in the details if there are multiple meanings, but the main translation field should be the most common one in context.
+8. If a component has no translation, set the "translation" field to null
+9. If a component has no details, set the "details" field to null
+10. The "position" field should be the starting character index of the word in the sentence
+11. The "details" field should be a dictionary with relevant grammatical information
+12. The "type" field should be one of the allowed values only
+13. The "word" field should be the exact word from the sentence
 
 [START_SENTENCE]
 {sentence}
@@ -247,11 +254,11 @@ EXAMPLE OUTPUT (follow this format exactly):
 {{
   "sentence_translation": "The cat is sitting on the mat",
   "components": [
-    {{"word": "De", "type": "article", "position": 0, "translation": "The", "details": {{"gender": "common", "number": "singular"}}}},
-    {{"word": "kat", "type": "noun", "position": 3, "translation": "cat", "details": {{"gender": "common", "number": "singular"}}}},
-    {{"word": "zit", "type": "verb", "position": 7, "translation": "sits", "details": {{"tense": "present", "person": "3rd", "number": "singular"}}}},
+    {{"word": "De", "type": "article", "position": 0, "translation": "The", "details": null }},
+    {{"word": "kat", "type": "noun", "position": 3, "translation": "cat", "details": {{ "gender": "common", "article": "de", "plural": "katten" }}}},
+    {{"word": "zit", "type": "verb", "position": 7, "translation": "sits", "details": {{"tense": "present", "person": "3rd", "number": "singular", "infinitive": "zitten"}}}},
     {{"word": "op", "type": "preposition", "position": 11, "translation": "on", "details": null}},
-    {{"word": "de", "type": "article", "position": 14, "translation": "the", "details": {{"gender": "common", "number": "singular"}}}},
+    {{"word": "de", "type": "article", "position": 14, "translation": "the", "details": null}},
     {{"word": "mat", "type": "noun", "position": 17, "translation": "mat", "details": {{"gender": "common", "number": "singular"}}}}
   ]
 }}
