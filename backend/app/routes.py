@@ -174,7 +174,7 @@ async def conjugate_verb(request: Request, body: ConjugateVerbRequest):
     """
     try:
         if not body.verb or not body.verb.strip():
-            raise HTTPException(status_code=400, detail="Verb cannot be empty")
+            raise HTTPException(status_code=400, detail="Please enter a verb to conjugate")
         
         verb = body.verb.strip().lower()
         # Validation via pydantic ensures format constraints are met
@@ -190,12 +190,16 @@ async def conjugate_verb(request: Request, body: ConjugateVerbRequest):
         
     except ProcessingError as e:
         logger.error(f"Failed to conjugate verb: {str(e)}")
-        raise HTTPException(status_code=404, detail=str(e))
+        # Provide user-friendly message instead of raw error
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Sorry, I couldn't conjugate '{body.verb}'. Please try another verb or check the spelling."
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error conjugating verb: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to conjugate verb")
+        raise HTTPException(status_code=500, detail="Something went wrong. Please try again in a moment.")
 
 @router.post("/conjugate-database", response_model=ConjugateVerbResponse)
 async def conjugate_verb_database_only(request: Request, body: ConjugateVerbRequest):
@@ -238,4 +242,63 @@ async def conjugate_verb_database_only(request: Request, body: ConjugateVerbRequ
     except Exception as e:
         logger.error(f"Error conjugating verb: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to conjugate verb")
+
+
+@router.get("/database-stats")
+async def get_database_stats(request: Request):
+    """
+    Get statistics about the verb conjugation database (admin endpoint).
+    
+    Returns information about:
+    - Total verbs in database
+    - Database size
+    - Most frequently queried verbs
+    - Estimated API savings
+    
+    Returns:
+        Dictionary with database statistics
+    """
+    try:
+        from app.verb_database_manager import VerbDatabaseManager
+        
+        stats = VerbDatabaseManager.get_database_stats()
+        query_stats = VerbDatabaseManager.get_query_statistics()
+        savings = VerbDatabaseManager.estimate_llm_savings()
+        
+        return {
+            'database': stats,
+            'queries': query_stats,
+            'savings': savings
+        }
+    except Exception as e:
+        logger.error(f"Error getting database statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve database statistics")
+
+
+@router.post("/database-export")
+async def export_database(request: Request):
+    """
+    Export all verbs to a JSON file for version control (admin endpoint).
+    
+    This creates a JSON snapshot of all verbs in the database, which can be
+    tracked in git for backup and portability.
+    
+    Returns:
+        Dictionary with export path and summary
+    """
+    try:
+        from app.verb_database_manager import VerbDatabaseManager
+        
+        export_path = VerbDatabaseManager.export_to_json()
+        stats = VerbDatabaseManager.get_database_stats()
+        
+        return {
+            'success': True,
+            'export_path': export_path,
+            'verbs_exported': stats.get('total_verbs', 0)
+        }
+    except Exception as e:
+        logger.error(f"Error exporting database: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to export database")
+
 

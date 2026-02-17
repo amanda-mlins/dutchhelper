@@ -38,6 +38,53 @@
                     <p class="english-translation">English: {{ conjugation.englishTranslation }}</p>
                 </div>
 
+                <!-- Verb Metadata (Separable, Type, Preposition, etc.) -->
+                <div v-if="hasVerbMetadata" class="verb-metadata">
+                    <div class="metadata-grid">
+                        <div v-if="conjugation.verbType" class="metadata-item">
+                            <span class="metadata-label">Verb Type:</span>
+                            <span class="metadata-value">{{ conjugation.verbType }}</span>
+                        </div>
+                        <div v-if="conjugation.separable" class="metadata-item">
+                            <span class="metadata-label">Separable:</span>
+                            <span class="metadata-value" :class="{ 'is-separable': conjugation.separable === 'yes' }">
+                                {{ conjugation.separable }}
+                            </span>
+                        </div>
+                        <div v-if="conjugation.separation" class="metadata-item">
+                            <span class="metadata-label">Separated as:</span>
+                            <span class="metadata-value">{{ conjugation.separation }}</span>
+                        </div>
+                        <div v-if="conjugation.preposition" class="metadata-item">
+                            <span class="metadata-label">Preposition:</span>
+                            <span class="metadata-value">{{ conjugation.preposition }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Synonyms -->
+                    <div v-if="conjugation.synonyms && conjugation.synonyms.length > 0" class="related-words">
+                        <h4>Synonyms</h4>
+                        <div class="word-tags">
+                            <span v-for="(syn, idx) in conjugation.synonyms" :key="`syn-${idx}`"
+                                class="word-tag synonym-tag">
+                                <router-link :to="`/conjugator/${syn}`">{{ syn
+                                    }}</router-link>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Antonyms -->
+                    <div v-if="conjugation.antonyms && conjugation.antonyms.length > 0" class="related-words">
+                        <h4>Antonyms</h4>
+                        <div class="word-tags">
+                            <span v-for="(ant, idx) in conjugation.antonyms" :key="`ant-${idx}`"
+                                class="word-tag antonym-tag">
+                                <router-link :to="`/conjugator/${ant}`">{{ ant }}</router-link>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Conjugation Tables -->
                 <div class="conjugation-tables">
                     <!-- Present Tense -->
@@ -181,6 +228,17 @@ export default {
     computed: {
         isEmpty() {
             return !this.inputVerb || this.inputVerb.trim().length === 0
+        },
+        hasVerbMetadata() {
+            if (!this.conjugation) return false
+            return !!(
+                this.conjugation.verbType ||
+                this.conjugation.separable ||
+                this.conjugation.separation ||
+                this.conjugation.preposition ||
+                (this.conjugation.synonyms && this.conjugation.synonyms.length > 0) ||
+                (this.conjugation.antonyms && this.conjugation.antonyms.length > 0)
+            )
         }
     },
     methods: {
@@ -235,6 +293,25 @@ export default {
             } catch (error) {
                 this.apiHealth = 'offline'
                 console.warn('Backend health check failed:', error.message)
+            }
+        }
+    },
+    watch: {
+        // Watch for route changes (when user clicks synonym/antonym links)
+        '$route.params.verb': function (newVerb) {
+            if (newVerb) {
+                this.inputVerb = newVerb
+                this.$nextTick(() => {
+                    this.conjugateVerb()
+                })
+            }
+        },
+        '$route.query.verb': function (newVerb) {
+            if (newVerb) {
+                this.inputVerb = newVerb
+                this.$nextTick(() => {
+                    this.conjugateVerb()
+                })
             }
         }
     },
@@ -603,6 +680,104 @@ export default {
     color: white;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Verb Metadata Styles */
+.verb-metadata {
+    background: linear-gradient(135deg, #f5f7ff 0%, #ede7f6 100%);
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    border-left: 4px solid #667eea;
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.metadata-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #667eea;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metadata-value {
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
+    padding: 6px 10px;
+    background: white;
+    border-radius: 4px;
+}
+
+.metadata-value.is-separable {
+    background: #c7d2e8;
+    color: #5b21b6;
+    font-weight: 600;
+}
+
+.related-words {
+    margin-top: 15px;
+}
+
+.related-words h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #667eea;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.word-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.word-tag {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.word-tag a {
+    color: inherit;
+    text-decoration: none;
+    display: inline;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.word-tag a:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+
+.synonym-tag {
+    background: #c7e9c0;
+    color: #2d5016;
+    border: 1px solid #a8d5a8;
+}
+
+.antonym-tag {
+    background: #f4c2c2;
+    color: #6b1b1b;
+    border: 1px solid #e8a8a8;
 }
 
 /* Responsive Design */

@@ -451,6 +451,11 @@ Return a JSON object with exactly this structure:
   "infinitive": "{verb}",
   "englishTranslation": "the English translation of the infinitive",
   "verbType": "regular or irregular",
+  "separable": "yes or no",
+  "separation": "the separated part if applicable",
+  "preposition": "the preposition if applicable",
+  "synonyms": ["list of synonyms if applicable"],
+  "antonyms": ["list of antonyms if applicable"],
   "tenses": [
     {{
       "dutchName": "Tegenwoordige Tijd",
@@ -502,10 +507,13 @@ Important rules:
 1. All 6 persons must be conjugated for each tense
 2. Include auxiliary verbs (zijn, hebben) in perfect and past perfect tenses
 3. The verbType should be "regular" or "irregular"
-4. Provide 4 practical examples with the conjugated verb
-5. Return ONLY valid JSON, no other text
-6. It must be the correct conjugation for the verb provided, do not conjugate a different verb or make up a verb. If the verb is not recognized, return an error message in the JSON with an "error" field instead of the conjugation data.
-7. If the input is not in the infinitive form find the infinitive and use that, if it is not a verb or not recognized return an error message in the JSON with an "error" field instead of the conjugation data.
+4. If the verb is separable, set "separable" to "yes" and provide the separated part in "separation", example: opstaan -> "separable": "yes", "separation": "op"
+5. If the verb requires a preposition, include it in "preposition", example: kijken naar -> "preposition": "naar"
+6. Provide synonyms and antonyms if applicable, otherwise leave them as empty arrays
+7. Provide 4 practical examples with the conjugated verb
+8. Return ONLY valid JSON, no other text
+9. It must be the correct conjugation for the verb provided, do not conjugate a different verb or make up a verb. If the verb is not recognized, return an error message in the JSON with an "error" field instead of the conjugation data.
+10. If the input is not in the infinitive form find the infinitive and use that, if it is not a verb or not recognized return an error message in the JSON with an "error" field instead of the conjugation data.
 Ensure the JSON is properly formatted and valid."""
 
     @staticmethod
@@ -537,10 +545,21 @@ Ensure the JSON is properly formatted and valid."""
             
             # Validate structure
             required_fields = ['infinitive', 'englishTranslation', 'verbType', 'tenses', 'examples']
+            optional_fields = ['separable', 'separation', 'preposition', 'synonyms', 'antonyms']
+            
+            # Check required fields
             for field in required_fields:
                 if field not in conjugation_data:
-                    logger.warning(f"[OpenRouter] Missing field in conjugation: {field}")
+                    logger.warning(f"[OpenRouter] Missing required field in conjugation: {field}")
                     conjugation_data[field] = None if field != 'tenses' else []
+            
+            # Ensure optional fields have sensible defaults
+            for field in optional_fields:
+                if field not in conjugation_data:
+                    if field == 'synonyms' or field == 'antonyms':
+                        conjugation_data[field] = []
+                    else:
+                        conjugation_data[field] = None
             
             # Validate tenses
             if len(conjugation_data.get('tenses', [])) < 6:

@@ -260,14 +260,14 @@ class ConjugateVerbRequest(BaseModel):
         if not v.strip():
             raise ValueError("Verb cannot be empty or whitespace-only")
         
-        # Allow letters, hyphens, and apostrophes only (common in Dutch)
-        if not all(c.isalpha() or c in "-'" for c in v):
-            raise ValueError("Verb contains invalid characters. Only letters, hyphens, and apostrophes allowed")
+        # Allow letters, hyphens, apostrophes, and spaces only (common in Dutch)
+        if not all(c.isalpha() or c in "-' " for c in v):
+            raise ValueError(f"Verb contains invalid characters. Only letters, hyphens, apostrophes, and spaces allowed: {v}")
         
         # Check for excessive special characters
         special_count = sum(1 for c in v if c in "-'")
         if special_count > 3:
-            raise ValueError("Verb contains too many special characters")
+            raise ValueError(f"Verb contains too many special characters: {v}")
         
         return v.strip()
 
@@ -287,6 +287,30 @@ class ConjugateVerbResponse(BaseModel):
     verbType: Optional[str] = Field(
         None,
         description="regular or irregular"
+    )
+    separable: Optional[str] = Field(
+        None,
+        description="yes or no"
+    )
+    separation: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Separated part of verb if separable"
+    )
+    preposition: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Preposition used with verb"
+    )
+    synonyms: Optional[List[str]] = Field(
+        None,
+        max_length=10,
+        description="Synonyms"
+    )
+    antonyms: Optional[List[str]] = Field(
+        None,
+        max_length=10,
+        description="Antonyms"
     )
     tenses: List[VerbTense] = Field(
         default_factory=list,
