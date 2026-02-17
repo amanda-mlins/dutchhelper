@@ -508,12 +508,13 @@ Important rules:
 2. Include auxiliary verbs (zijn, hebben) in perfect and past perfect tenses
 3. The verbType should be "regular" or "irregular"
 4. If the verb is separable, set "separable" to "yes" and provide the separated part in "separation", example: opstaan -> "separable": "yes", "separation": "op"
-5. If the verb requires a preposition, include it in "preposition", example: kijken naar -> "preposition": "naar"
-6. Provide synonyms and antonyms if applicable, otherwise leave them as empty arrays
-7. Provide 4 practical examples with the conjugated verb
-8. Return ONLY valid JSON, no other text
-9. It must be the correct conjugation for the verb provided, do not conjugate a different verb or make up a verb. If the verb is not recognized, return an error message in the JSON with an "error" field instead of the conjugation data.
-10. If the input is not in the infinitive form find the infinitive and use that, if it is not a verb or not recognized return an error message in the JSON with an "error" field instead of the conjugation data.
+5. Only consider a verb separable if there is a commonly used separated form in Dutch (e.g. opstaan, aankomen, afwassen). Do not mark verbs as separable if they are not commonly used in a separated form, even if they could theoretically be separated (example: ontslaan is not a separable verb even though it has the prefix ont).
+6. If the verb requires a preposition, include it in "preposition", example: kijken naar -> "preposition": "naar"
+7. Provide synonyms and antonyms if applicable, otherwise leave them as empty arrays
+8. Provide 4 practical examples with the conjugated verb
+9. Return ONLY valid JSON, no other text
+10. It must be the correct conjugation for the verb provided, do not conjugate a different verb or make up a verb. If the verb is not recognized, return an error message in the JSON with an "error" field instead of the conjugation data.
+11. If the input is not in the infinitive form find the infinitive and use that, if it is not a verb or not recognized return an error message in the JSON with an "error" field instead of the conjugation data.
 Ensure the JSON is properly formatted and valid."""
 
     @staticmethod

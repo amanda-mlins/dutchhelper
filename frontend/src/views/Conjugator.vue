@@ -52,7 +52,7 @@
                             </span>
                         </div>
                         <div v-if="conjugation.separation" class="metadata-item">
-                            <span class="metadata-label">Separated as:</span>
+                            <span class="metadata-label">Separation:</span>
                             <span class="metadata-value">{{ conjugation.separation }}</span>
                         </div>
                         <div v-if="conjugation.preposition" class="metadata-item">
@@ -68,7 +68,7 @@
                             <span v-for="(syn, idx) in conjugation.synonyms" :key="`syn-${idx}`"
                                 class="word-tag synonym-tag">
                                 <router-link :to="`/conjugator/${syn}`">{{ syn
-                                    }}</router-link>
+                                }}</router-link>
                             </span>
                         </div>
                     </div>
