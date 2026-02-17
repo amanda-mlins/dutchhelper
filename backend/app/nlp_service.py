@@ -23,16 +23,17 @@ class NLPService:
         return cls._segmenter
 
     @classmethod
-    def split_sentences(cls, text: str) -> List[str]:
+    def split_sentences(cls, text: str, deduplicate: bool = True) -> List[str]:
         """
         Split Dutch text into sentences using pysbd.
         Handles abbreviations like 'a.u.b.', 'e.g.', 'dr.', etc.
         
         Args:
             text: Dutch text to split
+            deduplicate: If True, remove duplicate sentences (default: True)
             
         Returns:
-            List of sentence strings
+            List of sentence strings (deduplicated if requested)
         """
         if not text or not text.strip():
             return []
@@ -42,6 +43,23 @@ class NLPService:
         
         # Clean up each sentence and filter out empty strings
         cleaned_sentences = [s.strip() for s in sentences if s.strip()]
+        
+        # Deduplicate while preserving order
+        if deduplicate:
+            unique_sentences = []
+            seen = set()
+            for sentence in cleaned_sentences:
+                # Case-insensitive deduplication to catch "Hello." vs "hello."
+                lower_sentence = sentence.lower()
+                if lower_sentence not in seen:
+                    seen.add(lower_sentence)
+                    unique_sentences.append(sentence)
+            cleaned_sentences = unique_sentences
+            
+            if logger.isEnabledFor(logging.DEBUG):
+                removed_count = len(sentences) - len(cleaned_sentences)
+                if removed_count > 0:
+                    logger.debug(f"Removed {removed_count} duplicate sentences")
         
         logger.debug(f"Split text into {len(cleaned_sentences)} sentences using pysbd")
         return cleaned_sentences
