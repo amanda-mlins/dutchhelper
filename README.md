@@ -54,12 +54,14 @@ dutchhelper/
 ## Tech Stack
 
 ### Backend
+
 - **FastAPI** - Modern async Python web framework
 - **Uvicorn** - ASGI server
 - **Pydantic** - Type validation and serialization
 - **Python 3.8+**
 
 ### Frontend
+
 - **Vue 3** - Progressive JavaScript framework
 - **Vue Router 4** - Client-side routing
 - **Vite** - Lightning-fast build tool
@@ -69,6 +71,7 @@ dutchhelper/
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - Node.js 14+
 - npm or yarn
@@ -84,8 +87,9 @@ python run.py
 Backend runs at `http://localhost:8000`
 
 **API Documentation:**
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
 
 ### Frontend Setup
 
@@ -102,11 +106,13 @@ Frontend runs at `http://localhost:5173`
 Open two terminals:
 
 **Terminal 1:**
+
 ```bash
 cd backend && python run.py
 ```
 
 **Terminal 2:**
+
 ```bash
 cd frontend && npm run dev
 ```
@@ -116,17 +122,20 @@ Visit `http://localhost:5173` and start learning!
 ## API Endpoints
 
 ### Health & Welcome
+
 ```
 GET  /              Welcome message + version info
 GET  /health        Health check
 ```
 
 ### Text Analysis (Main Feature)
+
 ```
 POST /api/analyze
 ```
 
 **Request:**
+
 ```json
 {
   "text": "Dit is een Nederlandse zin."
@@ -134,6 +143,7 @@ POST /api/analyze
 ```
 
 **Response:**
+
 ```json
 {
   "original_text": "Dit is een Nederlandse zin.",
@@ -148,6 +158,7 @@ POST /api/analyze
 ```
 
 ### Test Endpoint
+
 ```
 POST /api/message   Echo test endpoint
 ```
@@ -155,6 +166,7 @@ POST /api/message   Echo test endpoint
 ## Architecture
 
 ### Backend Architecture
+
 - **Routes** (`routes.py`) - HTTP endpoints only
 - **Services** (`services.py`) - Business logic (SentenceAnalyzerService)
 - **Models** (`models.py`) - Pydantic request/response schemas
@@ -162,6 +174,7 @@ POST /api/message   Echo test endpoint
 - **Main** (`main.py`) - App initialization & logging
 
 **Design Patterns Used:**
+
 - Service Layer Pattern
 - Custom Exception Handling
 - Dependency Injection Ready
@@ -170,11 +183,13 @@ POST /api/message   Echo test endpoint
 ### Frontend Pages
 
 **Home Page (`/`)**
+
 - Welcome section
 - Tools grid with feature cards
 - Navigation to Sentence Explainer
 
 **Sentence Explainer (`/sentence-explainer`)**
+
 - Dutch text input area (left column)
 - Real-time grammatical analysis (right column)
 - Sentence breakdown with components
@@ -200,6 +215,7 @@ POST /api/message   Echo test endpoint
 ### Example: Adding API Endpoint
 
 **1. models.py:**
+
 ```python
 class MyRequest(BaseModel):
     data: str
@@ -209,6 +225,7 @@ class MyResponse(BaseModel):
 ```
 
 **2. services.py:**
+
 ```python
 class MyService:
     @staticmethod
@@ -217,6 +234,7 @@ class MyService:
 ```
 
 **3. routes.py:**
+
 ```python
 @router.post("/my-endpoint", response_model=MyResponse)
 async def my_endpoint(request: MyRequest):
@@ -227,6 +245,7 @@ async def my_endpoint(request: MyRequest):
 ## Production Build
 
 ### Backend
+
 ```bash
 cd backend
 pip install gunicorn
@@ -234,6 +253,7 @@ gunicorn "app.main:app" -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 npm run build
@@ -244,6 +264,7 @@ Production files go to `frontend/dist/`
 ## Environment Variables
 
 ### Backend (.env)
+
 ```
 DEBUG=True
 API_HOST=0.0.0.0
@@ -251,12 +272,14 @@ API_PORT=8000
 ```
 
 ### Frontend
+
 API base URL is set in `src/views/SentenceExplainer.vue`
 Default: `http://localhost:8000`
 
 ## Testing
 
 ### Manual API Testing
+
 ```bash
 # Health check
 curl http://localhost:8000/health
@@ -268,26 +291,31 @@ curl -X POST http://localhost:8000/api/analyze \
 ```
 
 ### Swagger UI
-Open http://localhost:8000/docs for interactive API testing
+
+Open <http://localhost:8000/docs> for interactive API testing
 
 ## Troubleshooting
 
 ### CORS Issues
+
 Ensure both services are running. Check `backend/app/main.py` for allowed origins.
 
 ### Port Conflicts
 
 **Change Backend Port:**
+
 ```bash
 API_PORT=8001 python run.py
 ```
 
 **Change Frontend Port:**
+
 ```bash
 npm run dev -- --port 5174
 ```
 
 ### Dependencies Issues
+
 ```bash
 # Backend
 rm -rf venv && python -m venv venv && source venv/bin/activate
@@ -298,6 +326,7 @@ rm -rf node_modules && npm install
 ```
 
 ### Module Not Found
+
 ```bash
 # Backend
 cd backend && pip install -r requirements.txt
@@ -319,18 +348,21 @@ cd frontend && npm install
 ## Next Steps (Roadmap)
 
 ### Phase 2: NLP Implementation
+
 - [ ] Install spaCy with Dutch language model
 - [ ] Implement grammatical analysis in `SentenceAnalyzerService`
 - [ ] Identify: subjects, verbs, objects, adjectives, articles, nouns
 - [ ] Test with various Dutch sentences
 
 ### Phase 3: Database Integration
+
 - [ ] Add SQLAlchemy ORM
 - [ ] Create user accounts
 - [ ] Store analysis history
 - [ ] Add user preferences
 
 ### Phase 4: Enhanced Features
+
 - [ ] Word definitions and synonyms
 - [ ] Pronunciation guides
 - [ ] Example sentences
@@ -339,6 +371,7 @@ cd frontend && npm install
 - [ ] Spaced repetition system
 
 ### Phase 5: Deployment
+
 - [ ] CI/CD pipeline
 - [ ] Docker containerization
 - [ ] Cloud deployment (AWS, DigitalOcean, etc.)
@@ -347,10 +380,11 @@ cd frontend && npm install
 ## Documentation
 
 For detailed information, see:
-- **[QUICK_START.md](QUICK_START.md)** - How to run the application
-- **[REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)** - Complete overview of implementation
-- **[BACKEND_STRUCTURE.md](BACKEND_STRUCTURE.md)** - Backend architecture details
-- **[BACKEND_BEFORE_AFTER.md](BACKEND_BEFORE_AFTER.md)** - Code improvements and comparisons
+
+- **[QUICK_START.md](docs/QUICK_START.md)** - How to run the application
+- **[REFACTORING_SUMMARY.md](docs/REFACTORING_SUMMARY.md)** - Complete overview of implementation
+- **[BACKEND_STRUCTURE.md](docs/BACKEND_STRUCTURE.md)** - Backend architecture details
+- **[BACKEND_BEFORE_AFTER.md](docs/BACKEND_BEFORE_AFTER.md)** - Code improvements and comparisons
 
 ## Contributing
 
@@ -372,4 +406,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ---
 
-**Ready to get started?** See [QUICK_START.md](QUICK_START.md) for detailed setup instructions.
+**Ready to get started?** See [QUICK_START.md](docs/QUICK_START.md) for detailed setup instructions.

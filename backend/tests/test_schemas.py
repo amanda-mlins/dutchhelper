@@ -35,9 +35,9 @@ class TestMessageSchema:
             Message()
 
     def test_message_empty_text(self):
-        """Test Message with empty text"""
-        msg = Message(text="")
-        assert msg.text == ""
+        """Test Message rejects empty text"""
+        with pytest.raises(ValidationError):
+            Message(text="")
 
 
 class TestSentenceComponentSchema:
@@ -90,9 +90,9 @@ class TestSentenceComponentSchema:
         assert component.position == 0
 
     def test_component_position_negative(self):
-        """Test that position can be negative (though unusual)"""
-        component = SentenceComponent(type="noun", value="test", position=-1)
-        assert component.position == -1
+        """Test that position must be non-negative (security constraint)"""
+        with pytest.raises(ValidationError):
+            SentenceComponent(type="noun", value="test", position=-1)
 
 
 class TestSentenceAnalysisSchema:
@@ -149,9 +149,9 @@ class TestTextAnalysisRequestSchema:
             TextAnalysisRequest()
 
     def test_text_analysis_request_empty_text(self):
-        """Test TextAnalysisRequest with empty text"""
-        request = TextAnalysisRequest(text="")
-        assert request.text == ""
+        """Test TextAnalysisRequest rejects empty text"""
+        with pytest.raises(ValidationError):
+            TextAnalysisRequest(text="")
 
 
 class TestAnalyzeSentenceRequestSchema:
@@ -168,9 +168,9 @@ class TestAnalyzeSentenceRequestSchema:
             AnalyzeSentenceRequest()
 
     def test_analyze_sentence_request_empty_sentence(self):
-        """Test AnalyzeSentenceRequest with empty sentence"""
-        request = AnalyzeSentenceRequest(sentence="")
-        assert request.sentence == ""
+        """Test AnalyzeSentenceRequest rejects empty sentence"""
+        with pytest.raises(ValidationError):
+            AnalyzeSentenceRequest(sentence="")
 
 
 class TestTextAnalysisResponseSchema:

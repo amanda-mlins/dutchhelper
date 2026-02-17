@@ -1,6 +1,6 @@
 """API routes for DutchHelper"""
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas import (
     Message, 
     TextAnalysisRequest, 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["api"])
 
 @router.post("/message", response_model=Message)
-async def send_message(message: Message):
+async def send_message(request: Request, message: Message):
     """
     Echo a message back (placeholder endpoint for testing).
     
@@ -31,11 +31,11 @@ async def send_message(message: Message):
     Returns:
         Echo response with received status
     """
-    logger.info(f"Message received: {message.text}")
-    return {"text": f"You said: {message.text}", "status": "received"}
+    logger.info(f"Message received: {message.text[:100] if message.text else 'empty'}")
+    return {"text": f"You said: {message.text[:100]}", "status": "received"}
 
 @router.post("/split-sentences", response_model=SplitSentencesResponse)
-async def split_sentences(request: TextAnalysisRequest):
+async def split_sentences(request: Request, body: TextAnalysisRequest):
     """
     Split Dutch text into sentences using robust pysbd library.
     
@@ -44,21 +44,22 @@ async def split_sentences(request: TextAnalysisRequest):
     one in parallel using the /api/analyze-sentence endpoint.
     
     Args:
-        request: TextAnalysisRequest containing the Dutch text to split
+        body: TextAnalysisRequest containing the Dutch text to split
         
     Returns:
         SplitSentencesResponse with list of sentences
         
     Raises:
-        ValidationError: If text is empty or invalid
+        HTTPException: If text is empty or invalid (400, 429 for rate limit)
     """
     try:
-        if not request.text or not request.text.strip():
+        if not body.text or not body.text.strip():
             raise ValidationError("Text cannot be empty")
         
-        logger.info(f"Splitting text: {request.text[:100]}...")
+        # Additional validation via pydantic handles constraints
+        logger.info(f"Splitting text: {body.text[:100]}...")
         
-        sentences = NLPService.split_sentences(request.text)
+        sentences = NLPService.split_sentences(body.text)
         
         logger.info(f"Split complete: {len(sentences)} sentences found")
         
@@ -68,47 +69,51 @@ async def split_sentences(request: TextAnalysisRequest):
         )
         
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Validation error in split_sentences: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     except Exception as e:
-        logger.error(f"Error splitting sentences: {str(e)}")
+        logger.error(f"Error splitting sentences: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to split sentences")
 
 @router.post("/analyze", response_model=TextAnalysisResponse)
-async def analyze_text(request: TextAnalysisRequest):
+async def analyze_text(request: Request, body: TextAnalysisRequest):
     """
     Analyze Dutch text and break it down into grammatical components.
     
     Args:
-        request: TextAnalysisRequest containing the Dutch text to analyze
+        body: TextAnalysisRequest containing the Dutch text to analyze
         
     Returns:
         TextAnalysisResponse with sentences and their grammatical components
         
     Raises:
-        ValidationError: If text is empty or invalid
-        ProcessingError: If analysis fails
+        HTTPException: If text is empty, invalid, or analysis fails (400, 429, 500)
     """
     try:
-        if not request.text or not request.text.strip():
+        if not body.text or not body.text.strip():
             raise ValidationError("Text cannot be empty")
         
-        logger.info(f"Analyzing text: {request.text[:100]}...")
+        # Additional validation via pydantic handles constraints
+        logger.info(f"Analyzing text: {body.text[:100]}...")
         
-        analysis = await SentenceAnalyzerService.analyze_text(request.text)
+        analysis = await SentenceAnalyzerService.analyze_text(body.text)
         
         logger.info(f"Analysis complete: {len(analysis.sentences)} sentences found")
         
         return analysis
         
-    except ValidationError:
-        raise
+    except ValidationError as e:
+        logger.error(f"Validation error in analyze_text: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
+    except ProcessingError as e:
+        logger.error(f"Processing error in analyze_text: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error analyzing text: {str(e)}")
-        raise ProcessingError(f"Failed to analyze text: {str(e)}")
+        logger.error(f"Error analyzing text: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to analyze text")
 
 @router.post("/analyze-sentence", response_model=SentenceAnalysis)
-async def analyze_sentence(request: AnalyzeSentenceRequest):
+async def analyze_sentence(request: Request, body: AnalyzeSentenceRequest):
     """
     Analyze a single sentence for grammatical components.
     
@@ -117,20 +122,21 @@ async def analyze_sentence(request: AnalyzeSentenceRequest):
     Results are returned as soon as they're ready, enabling progressive UI updates.
     
     Args:
-        request: AnalyzeSentenceRequest containing a single sentence to analyze
+        body: AnalyzeSentenceRequest containing a single sentence to analyze
         
     Returns:
         SentenceAnalysis with sentence translation and grammatical components
         
     Raises:
-        HTTPException: If sentence is empty or analysis fails
+        HTTPException: If sentence is empty, invalid, or analysis fails (400, 429, 500)
     """
     try:
-        sentence = request.sentence.strip()
+        sentence = body.sentence.strip()
         
         if not sentence:
             raise HTTPException(status_code=400, detail="Sentence cannot be empty")
         
+        # Validation via pydantic ensures constraints are met
         logger.info(f"[Parallel] Analyzing sentence: {sentence[:50]}...")
         
         # Use service to analyze single sentence
@@ -150,7 +156,7 @@ async def analyze_sentence(request: AnalyzeSentenceRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/conjugate", response_model=ConjugateVerbResponse)
-async def conjugate_verb(request: ConjugateVerbRequest):
+async def conjugate_verb(request: Request, body: ConjugateVerbRequest):
     """
     Conjugate a Dutch verb across all tenses and persons.
     
@@ -158,19 +164,20 @@ async def conjugate_verb(request: ConjugateVerbRequest):
     If not found, uses OpenRouter LLM to generate the conjugation.
     
     Args:
-        request: ConjugateVerbRequest containing the verb to conjugate
+        body: ConjugateVerbRequest containing the verb to conjugate
         
     Returns:
         ConjugateVerbResponse with conjugations, translations, and examples
         
     Raises:
-        HTTPException: If verb cannot be conjugated or input is invalid
+        HTTPException: If verb is empty, invalid, cannot be conjugated (400, 404, 429, 500)
     """
     try:
-        if not request.verb or not request.verb.strip():
+        if not body.verb or not body.verb.strip():
             raise HTTPException(status_code=400, detail="Verb cannot be empty")
         
-        verb = request.verb.strip().lower()
+        verb = body.verb.strip().lower()
+        # Validation via pydantic ensures format constraints are met
         logger.info(f"Conjugating verb (with LLM fallback): {verb}")
         
         # Use the async method with LLM fallback
@@ -191,7 +198,7 @@ async def conjugate_verb(request: ConjugateVerbRequest):
         raise HTTPException(status_code=500, detail="Failed to conjugate verb")
 
 @router.post("/conjugate-database", response_model=ConjugateVerbResponse)
-async def conjugate_verb_database_only(request: ConjugateVerbRequest):
+async def conjugate_verb_database_only(request: Request, body: ConjugateVerbRequest):
     """
     Conjugate a Dutch verb from the local database only (no LLM).
     
@@ -199,19 +206,20 @@ async def conjugate_verb_database_only(request: ConjugateVerbRequest):
     Useful for fast responses without API calls.
     
     Args:
-        request: ConjugateVerbRequest containing the verb to conjugate
+        body: ConjugateVerbRequest containing the verb to conjugate
         
     Returns:
         ConjugateVerbResponse with conjugations, translations, and examples
         
     Raises:
-        HTTPException: If verb is not found in database
+        HTTPException: If verb is empty, invalid, or not found in database (400, 404, 429, 500)
     """
     try:
-        if not request.verb or not request.verb.strip():
+        if not body.verb or not body.verb.strip():
             raise HTTPException(status_code=400, detail="Verb cannot be empty")
         
-        verb = request.verb.strip().lower()
+        verb = body.verb.strip().lower()
+        # Validation via pydantic ensures format constraints are met
         logger.info(f"Conjugating verb from database: {verb}")
         
         # Get conjugation data from service (database only, no LLM)
