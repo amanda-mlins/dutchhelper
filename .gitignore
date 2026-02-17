@@ -224,3 +224,6 @@ yarn-error.log*
 .vscode/
 .DS_Store
 
+# Local database files
+.db
+
