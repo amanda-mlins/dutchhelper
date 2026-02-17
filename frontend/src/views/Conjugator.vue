@@ -30,180 +30,200 @@
                 <p>Conjugating verb...</p>
             </section>
 
-            <!-- Conjugation Results -->
-            <section v-if="conjugation && !loading" class="section results-section">
-                <!-- Verb Information Header -->
-                <div class="verb-header">
-                    <h2>{{ conjugation.infinitive }}</h2>
-                    <p class="english-translation">English: {{ conjugation.englishTranslation }}</p>
-                </div>
-
-                <!-- Verb Metadata (Separable, Type, Preposition, etc.) -->
-                <div v-if="hasVerbMetadata" class="verb-metadata">
-                    <div class="metadata-grid">
-                        <div v-if="conjugation.verbType" class="metadata-item">
-                            <span class="metadata-label">Verb Type:</span>
-                            <span class="metadata-value">{{ conjugation.verbType }}</span>
+            <!-- Conjugation Results with Two-Column Layout -->
+            <div v-if="conjugation && !loading" class="results-container">
+                <!-- Left Sidebar: Metadata and Suggestions -->
+                <aside class="sidebar">
+                    <!-- Verb Metadata (Separable, Type, Preposition, etc.) -->
+                    <section v-if="hasVerbMetadata" class="section verb-metadata-section">
+                        <div class="metadata-grid">
+                            <div v-if="conjugation.verbType" class="metadata-item">
+                                <span class="metadata-label">Verb Type:</span>
+                                <span class="metadata-value">{{ conjugation.verbType }}</span>
+                            </div>
+                            <div v-if="conjugation.separable" class="metadata-item">
+                                <span class="metadata-label">Separable:</span>
+                                <span class="metadata-value"
+                                    :class="{ 'is-separable': conjugation.separable === 'yes' }">
+                                    {{ conjugation.separable }}
+                                </span>
+                            </div>
+                            <div v-if="conjugation.separation" class="metadata-item">
+                                <span class="metadata-label">Separation:</span>
+                                <span class="metadata-value">{{ conjugation.separation }}</span>
+                            </div>
+                            <div v-if="conjugation.preposition" class="metadata-item">
+                                <span class="metadata-label">Preposition:</span>
+                                <span class="metadata-value">{{ conjugation.preposition }}</span>
+                            </div>
                         </div>
-                        <div v-if="conjugation.separable" class="metadata-item">
-                            <span class="metadata-label">Separable:</span>
-                            <span class="metadata-value" :class="{ 'is-separable': conjugation.separable === 'yes' }">
-                                {{ conjugation.separable }}
-                            </span>
+
+                        <!-- Synonyms -->
+                        <div v-if="conjugation.synonyms && conjugation.synonyms.length > 0" class="related-words">
+                            <h4>Synonyms</h4>
+                            <div class="word-tags">
+                                <span v-for="(syn, idx) in conjugation.synonyms" :key="`syn-${idx}`"
+                                    class="word-tag synonym-tag">
+                                    <router-link :to="`/conjugator/${syn}`">{{ syn
+                                    }}</router-link>
+                                </span>
+                            </div>
                         </div>
-                        <div v-if="conjugation.separation" class="metadata-item">
-                            <span class="metadata-label">Separation:</span>
-                            <span class="metadata-value">{{ conjugation.separation }}</span>
+
+                        <!-- Antonyms -->
+                        <div v-if="conjugation.antonyms && conjugation.antonyms.length > 0" class="related-words">
+                            <h4>Antonyms</h4>
+                            <div class="word-tags">
+                                <span v-for="(ant, idx) in conjugation.antonyms" :key="`ant-${idx}`"
+                                    class="word-tag antonym-tag">
+                                    <router-link :to="`/conjugator/${ant}`">{{ ant }}</router-link>
+                                </span>
+                            </div>
                         </div>
-                        <div v-if="conjugation.preposition" class="metadata-item">
-                            <span class="metadata-label">Preposition:</span>
-                            <span class="metadata-value">{{ conjugation.preposition }}</span>
+                    </section>
+
+                    <!-- Common Verbs Suggestion -->
+                    <section class="section suggestion-section-sidebar">
+                        <h3>Popular Verbs</h3>
+                        <div class="common-verbs-vertical">
+                            <button v-for="verb in commonVerbs" :key="verb" @click="inputVerb = verb; conjugateVerb()"
+                                class="verb-button-vertical">
+                                {{ verb }}
+                            </button>
                         </div>
-                    </div>
+                    </section>
+                </aside>
 
-                    <!-- Synonyms -->
-                    <div v-if="conjugation.synonyms && conjugation.synonyms.length > 0" class="related-words">
-                        <h4>Synonyms</h4>
-                        <div class="word-tags">
-                            <span v-for="(syn, idx) in conjugation.synonyms" :key="`syn-${idx}`"
-                                class="word-tag synonym-tag">
-                                <router-link :to="`/conjugator/${syn}`">{{ syn
-                                }}</router-link>
-                            </span>
+                <!-- Main Content: Conjugations -->
+                <main class="main-content">
+                    <!-- Verb Information Header -->
+                    <section class="section verb-header-section">
+                        <div class="verb-header">
+                            <h2>{{ conjugation.infinitive }}</h2>
+                            <p class="english-translation">English: {{ conjugation.englishTranslation }}</p>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- Antonyms -->
-                    <div v-if="conjugation.antonyms && conjugation.antonyms.length > 0" class="related-words">
-                        <h4>Antonyms</h4>
-                        <div class="word-tags">
-                            <span v-for="(ant, idx) in conjugation.antonyms" :key="`ant-${idx}`"
-                                class="word-tag antonym-tag">
-                                <router-link :to="`/conjugator/${ant}`">{{ ant }}</router-link>
-                            </span>
+                    <!-- Conjugation Tables -->
+                    <section class="section conjugation-section">
+                        <div class="conjugation-tables">
+                            <!-- Present Tense -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[0]?.dutchName }} <span class="english-name">(Present)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[0]?.forms"
+                                            :key="`present-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Simple Past (Imperfect) -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[1]?.dutchName }} <span class="english-name">(Simple
+                                        Past)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[1]?.forms"
+                                            :key="`past-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Present Perfect -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[2]?.dutchName }} <span class="english-name">(Present
+                                        Perfect)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[2]?.forms"
+                                            :key="`present-perfect-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Past Perfect -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[3]?.dutchName }} <span class="english-name">(Past
+                                        Perfect)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[3]?.forms"
+                                            :key="`past-perfect-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Future Simple -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[4]?.dutchName }} <span class="english-name">(Future
+                                        Simple)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[4]?.forms"
+                                            :key="`future-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Conditional -->
+                            <div class="tense-table">
+                                <h3 class="tense-title">
+                                    {{ conjugation.tenses[5]?.dutchName }} <span
+                                        class="english-name">(Conditional)</span>
+                                </h3>
+                                <table class="conjugation-table">
+                                    <tbody>
+                                        <tr v-for="(form, index) in conjugation.tenses[5]?.forms"
+                                            :key="`conditional-${index}`">
+                                            <td class="person-label">{{ form.person }}</td>
+                                            <td class="conjugated-form">{{ form.conjugation }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                </div>
+                    </section>
 
-                <!-- Conjugation Tables -->
-                <div class="conjugation-tables">
-                    <!-- Present Tense -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[0]?.dutchName }} <span class="english-name">(Present)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[0]?.forms" :key="`present-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Simple Past (Imperfect) -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[1]?.dutchName }} <span class="english-name">(Simple Past)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[1]?.forms" :key="`past-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Present Perfect -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[2]?.dutchName }} <span class="english-name">(Present Perfect)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[2]?.forms"
-                                    :key="`present-perfect-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Past Perfect -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[3]?.dutchName }} <span class="english-name">(Past Perfect)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[3]?.forms"
-                                    :key="`past-perfect-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Future Simple -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[4]?.dutchName }} <span class="english-name">(Future Simple)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[4]?.forms" :key="`future-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Conditional -->
-                    <div class="tense-table">
-                        <h3 class="tense-title">
-                            {{ conjugation.tenses[5]?.dutchName }} <span class="english-name">(Conditional)</span>
-                        </h3>
-                        <table class="conjugation-table">
-                            <tbody>
-                                <tr v-for="(form, index) in conjugation.tenses[5]?.forms" :key="`conditional-${index}`">
-                                    <td class="person-label">{{ form.person }}</td>
-                                    <td class="conjugated-form">{{ form.conjugation }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Usage Examples -->
-            <section v-if="conjugation && !loading && conjugation.examples" class="section examples-section">
-                <h2>Usage Examples</h2>
-                <div class="examples-list">
-                    <div v-for="(example, index) in conjugation.examples" :key="`example-${index}`"
-                        class="example-card">
-                        <p class="example-dutch">{{ example.dutch }}</p>
-                        <p class="example-english">{{ example.english }}</p>
-                        <p class="example-tense" v-if="example.tense">{{ example.tense }}</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Common Verbs Suggestion -->
-            <section class="section suggestion-section">
-                <h3>Popular Dutch Verbs to Try</h3>
-                <div class="common-verbs">
-                    <button v-for="verb in commonVerbs" :key="verb" @click="inputVerb = verb; conjugateVerb()"
-                        class="verb-button">
-                        {{ verb }}
-                    </button>
-                </div>
-            </section>
+                    <!-- Usage Examples -->
+                    <section v-if="conjugation && !loading && conjugation.examples" class="section examples-section">
+                        <h2>Usage Examples</h2>
+                        <div class="examples-list">
+                            <div v-for="(example, index) in conjugation.examples" :key="`example-${index}`"
+                                class="example-card">
+                                <p class="example-dutch">{{ example.dutch }}</p>
+                                <p class="example-english">{{ example.english }}</p>
+                                <p class="example-tense" v-if="example.tense">{{ example.tense }}</p>
+                            </div>
+                        </div>
+                    </section>
+                </main>
+            </div>
         </main>
     </div>
 </template>
@@ -389,16 +409,36 @@ export default {
 }
 
 .main {
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 40px 20px;
+}
+
+/* Two-Column Layout */
+.results-container {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 30px;
+    align-items: start;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .section {
     background: white;
     border-radius: 8px;
     padding: 30px;
-    margin-bottom: 20px;
+    margin-bottom: 0;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
@@ -498,8 +538,27 @@ export default {
 }
 
 /* Results Section */
-.results-section {
+.verb-header-section {
     animation: slideIn 0.3s ease-out;
+}
+
+.conjugation-section {
+    animation: slideIn 0.3s ease-out;
+}
+
+.verb-metadata-section {
+    animation: slideIn 0.3s ease-out;
+    background: linear-gradient(135deg, #f5f7ff 0%, #ede7f6 100%);
+    border-left: 4px solid #667eea;
+    position: sticky;
+    top: 20px;
+}
+
+.suggestion-section-sidebar {
+    background: linear-gradient(135deg, #fff5f5 0%, #fff0f5 100%);
+    border-left: 4px solid #764ba2;
+    position: sticky;
+    top: 400px;
 }
 
 @keyframes slideIn {
@@ -663,6 +722,18 @@ export default {
     gap: 10px;
 }
 
+.common-verbs-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.suggestion-section-sidebar h3 {
+    color: #764ba2;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
 .verb-button {
     padding: 10px 18px;
     background: white;
@@ -682,6 +753,26 @@ export default {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
+.verb-button-vertical {
+    padding: 10px 16px;
+    background: white;
+    color: #764ba2;
+    border: 2px solid #764ba2;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: left;
+    width: 100%;
+}
+
+.verb-button-vertical:hover {
+    background: #764ba2;
+    color: white;
+    transform: translateX(4px);
+}
+
 /* Verb Metadata Styles */
 .verb-metadata {
     background: linear-gradient(135deg, #f5f7ff 0%, #ede7f6 100%);
@@ -694,9 +785,9 @@ export default {
 
 .metadata-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 20px;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 15px;
 }
 
 .metadata-item {
@@ -781,6 +872,12 @@ export default {
 }
 
 /* Responsive Design */
+@media (max-width: 1024px) {
+    .results-container {
+        grid-template-columns: 250px 1fr;
+    }
+}
+
 @media (max-width: 768px) {
     .header h1 {
         font-size: 32px;
@@ -805,6 +902,18 @@ export default {
 
     .examples-list {
         grid-template-columns: 1fr;
+    }
+
+    /* Stack sidebar and main content on mobile */
+    .results-container {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .verb-metadata-section,
+    .suggestion-section-sidebar {
+        position: static;
+        top: auto;
     }
 }
 </style>
