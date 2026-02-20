@@ -225,5 +225,5 @@ yarn-error.log*
 .DS_Store
 
 # Local database files
-.db
+*.db
 
