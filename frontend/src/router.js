@@ -3,6 +3,7 @@ import Home from './views/Home.vue'
 import SentenceExplainer from './views/SentenceExplainer.vue'
 import Conjugator from './views/Conjugator.vue'
 import ArticleGame from './views/ArticleGame.vue'
+import WordBank from './views/WordBank.vue'
 
 const routes = [
   {
@@ -29,6 +30,11 @@ const routes = [
     path: '/article-game',
     name: 'ArticleGame',
     component: ArticleGame
+  },
+  {
+    path: '/word-bank',
+    name: 'WordBank',
+    component: WordBank
   }
 ]
 

@@ -1,8 +1,9 @@
 """API routes for DutchHelper"""
 import logging
 from typing import List
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends, Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from app.schemas import (
     Message, 
     TextAnalysisRequest, 
@@ -18,6 +19,9 @@ from app.nlp_service import NLPService
 from app.verb_conjugation_service import VerbConjugationService
 from app.article_game_service import ArticleGameService
 from app.exceptions import ValidationError, ProcessingError
+from app.database import get_db, init_db
+from app.word_list_service import WordListService
+from . import models
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,9 @@ class GameResult(BaseModel):
     score: int
     total_questions: int
     accuracy: float
+
+# This will create the database tables if they don't exist
+init_db()
 
 @router.post("/message", response_model=Message)
 async def send_message(request: Request, message: Message):
@@ -481,5 +488,44 @@ async def get_game_detail(request: Request, game_id: int):
     except Exception as e:
         logger.error(f"Error getting game detail: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve game details")
+
+# --- Word Bank API Endpoints ---
+
+@router.post("/word-bank/words", response_model=models.UserWordSchema, status_code=201)
+async def add_user_word(word_data: models.UserWordCreate, db: Session = Depends(get_db)):
+    """Adds a new word to the default user's word bank."""
+    service = WordListService(db)
+    try:
+        # For now, we'll use a default user. This can be expanded later.
+        new_word = await service.add_word(word=word_data.word)
+        return new_word
+    except Exception as e:
+        logger.error(f"Error adding word '{word_data.word}': {e}")
+        raise HTTPException(status_code=500, detail="Failed to add word.")
+
+@router.get("/word-bank/words", response_model=List[models.UserWordSchema])
+def get_user_words(db: Session = Depends(get_db)):
+    """Retrieves all words for the default user."""
+    service = WordListService(db)
+    words = service.get_words_for_user()
+    return words
+
+@router.put("/word-bank/words/{word_id}", response_model=models.UserWordSchema)
+def update_user_word(word_id: int, word_data: models.UserWordCreate, db: Session = Depends(get_db)):
+    """Updates a word in the user's word bank."""
+    service = WordListService(db)
+    updated_word = service.update_word(word_id, word_data)
+    if not updated_word:
+        raise HTTPException(status_code=404, detail="Word not found.")
+    return updated_word
+
+@router.delete("/word-bank/words/{word_id}", status_code=204)
+def delete_user_word(word_id: int, db: Session = Depends(get_db)):
+    """Deletes a word from the user's word bank."""
+    service = WordListService(db)
+    success = service.delete_word(word_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Word not found.")
+    return Response(status_code=204)
 
 

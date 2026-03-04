@@ -1,6 +1,7 @@
 """LLM service for OpenRouter integration"""
 import logging
 import os
+from fastapi.exceptions import ResponseValidationError
 import httpx
 import json
 from typing import Optional, List
@@ -574,3 +575,58 @@ Ensure the JSON is properly formatted and valid."""
         except Exception as e:
             logger.error(f"[OpenRouter] Unexpected error parsing conjugation: {str(e)}")
             raise ProcessingError(f"Unexpected error: {str(e)}")
+    
+    @staticmethod
+    async def get_word_details(word: str) -> dict:
+        """
+        Uses an LLM to get a comprehensive analysis of a Dutch word, including its type.
+        """
+        client = OpenRouterService.get_client()
+        prompt = f"""
+        Analyze the Dutch word "{word}".
+        Provide a response in JSON format with the following keys:
+        - "word_type": The grammatical type of the word (e.g., "noun", "verb", "adjective").
+        - "definition": A concise definition of the word in English.
+        - "translation_en": The most common English translation.
+        - "example": A simple Dutch sentence using the word, with an English translation.
+        All fields are required. If word can have multiple types, provide the most common one in context. If the word is not recognized, return "unknown" for word_type and appropriate error messages for other fields.
+        Return ONLY the JSON object - no additional text, explanations, or commentary.
+        Make sure the JSON is properly formatted and valid.
+        If it is a verb, store the infinitive form and add the requested form in the examples field, for example if the word is "loopt", the infinitive is "lopen" and the example should use "loopt" in a sentence.
+        Example for the word "fiets":
+        {{
+            "word_type": "noun",
+            "definition": "A human-powered vehicle with two wheels.",
+            "translation_en": "bicycle",
+            "example": "Ik ga met de fiets naar het werk. (I go to work by bicycle.)"
+        }}
+        """
+        
+        try:
+            response = await client.post(
+                "/chat/completions",
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant that provides dictionary-style information about Dutch words in JSON format."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 2000,
+                    # "response_format": {"type": "json_object"}
+                }
+            )
+            logger.info(response)
+            # response.raise_for_status()
+            
+            content = response.json()['choices'][0]['message']['content']
+            details = json.loads(content)
+            return details
+        except Exception as e:
+            logger.error(f"Error fetching details from LLM for '{word}': {e}")
+            return {
+                "word_type": "unknown",
+                "definition": "Error fetching definition.",
+                "translation_en": "Error fetching translation.",
+                "example": "Error fetching example."
+            }

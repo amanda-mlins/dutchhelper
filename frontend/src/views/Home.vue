@@ -28,6 +28,10 @@
             <p>Master Dutch articles! Practice guessing whether words use "de" or "het" with interactive games and
               progress tracking.</p>
           </router-link>
+          <router-link to="/word-bank" class="tool-card">
+            <h3>🏦 My Word Bank</h3>
+            <p>Create your own personal dictionary. Save words, review definitions, and practice with flashcards.</p>
+          </router-link>
         </div>
       </section>
     </main>
