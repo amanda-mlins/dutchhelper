@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from './views/Home.vue'
 import SentenceExplainer from './views/SentenceExplainer.vue'
 import Conjugator from './views/Conjugator.vue'
+import ArticleGame from './views/ArticleGame.vue'
 
 const routes = [
   {
@@ -23,6 +24,11 @@ const routes = [
     path: '/conjugator/:verb',
     name: 'ConjugatorWithVerb',
     component: Conjugator
+  },
+  {
+    path: '/article-game',
+    name: 'ArticleGame',
+    component: ArticleGame
   }
 ]
 

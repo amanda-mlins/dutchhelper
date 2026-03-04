@@ -23,6 +23,11 @@
             <h3>🔤 Verb Conjugator</h3>
             <p>Learn how to conjugate Dutch verbs across all tenses and persons with real-world examples.</p>
           </router-link>
+          <router-link to="/article-game" class="tool-card">
+            <h3>🎮 Article Game</h3>
+            <p>Master Dutch articles! Practice guessing whether words use "de" or "het" with interactive games and
+              progress tracking.</p>
+          </router-link>
         </div>
       </section>
     </main>

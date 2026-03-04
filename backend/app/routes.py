@@ -1,6 +1,8 @@
 """API routes for DutchHelper"""
 import logging
+from typing import List
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from app.schemas import (
     Message, 
     TextAnalysisRequest, 
@@ -14,11 +16,49 @@ from app.schemas import (
 from app.services import SentenceAnalyzerService
 from app.nlp_service import NLPService
 from app.verb_conjugation_service import VerbConjugationService
+from app.article_game_service import ArticleGameService
 from app.exceptions import ValidationError, ProcessingError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["api"])
+
+# Game-related Pydantic models
+class GameWordResponse(BaseModel):
+    """Response model for game words."""
+    word: str
+    difficulty: str
+    category: str
+
+class GameWordsRequest(BaseModel):
+    """Request model for getting game words."""
+    count: int = 20
+    personalized: bool = True
+
+class SubmitAnswerRequest(BaseModel):
+    """Request model for submitting an answer."""
+    word: str
+    user_answer: str
+
+class SubmitAnswerResponse(BaseModel):
+    """Response model for answer submission."""
+    is_correct: bool
+    word: str
+    correct_article: str
+    user_answer: str
+    difficulty: str
+    category: str
+
+class SaveGameRequest(BaseModel):
+    """Request model for saving game results."""
+    answers: List[dict]
+
+class GameResult(BaseModel):
+    """Model for game result."""
+    game_id: int
+    score: int
+    total_questions: int
+    accuracy: float
 
 @router.post("/message", response_model=Message)
 async def send_message(request: Request, message: Message):
@@ -257,5 +297,189 @@ async def export_database(request: Request):
     except Exception as e:
         logger.error(f"Error exporting database: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to export database")
+
+
+# ============================================================================
+# Article Game Endpoints
+# ============================================================================
+
+# Initialize game service
+_game_service = None
+
+def get_game_service():
+    """Get or create the game service."""
+    global _game_service
+    if _game_service is None:
+        _game_service = ArticleGameService()
+    return _game_service
+
+
+@router.post("/game/words")
+async def get_game_words(request: Request, body: GameWordsRequest):
+    """
+    Get words for an article guessing game session.
+    
+    Args:
+        body: GameWordsRequest with count (20, 30, or 50) and personalized flag
+        
+    Returns:
+        List of words with their metadata (article hidden from client)
+    """
+    try:
+        if body.count not in [20, 30, 50]:
+            raise ValidationError("Word count must be 20, 30, or 50")
+        
+        game_service = get_game_service()
+        words = game_service.get_game_words(body.count, body.personalized)
+        
+        # Return words without revealing the article
+        return {
+            "words": [{"word": w["word"], "difficulty": w["difficulty"], "category": w["category"], "translation": w["translation"]} 
+                      for w in words],
+            "count": len(words)
+        }
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting game words: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get game words")
+
+
+@router.post("/game/submit")
+async def submit_answer(request: Request, body: SubmitAnswerRequest):
+    """
+    Submit an answer for a word in the article game.
+    
+    Args:
+        body: SubmitAnswerRequest with word and user_answer (de or het)
+        
+    Returns:
+        SubmitAnswerResponse with correctness and explanation
+    """
+    try:
+        if not body.word or not body.user_answer:
+            raise ValidationError("Word and user_answer are required")
+        
+        if body.user_answer.lower() not in ['de', 'het']:
+            raise ValidationError("User answer must be 'de' or 'het'")
+        
+        game_service = get_game_service()
+        result = game_service.submit_answer(body.word, body.user_answer)
+        
+        if "error" in result:
+            raise ValidationError(result["error"])
+        
+        return result
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error submitting answer: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to submit answer")
+
+
+@router.post("/game/save")
+async def save_game(request: Request, body: SaveGameRequest):
+    """
+    Save a completed game to the database.
+    
+    Args:
+        body: SaveGameRequest with list of answers from the game
+        
+    Returns:
+        GameResult with game_id, score, and accuracy
+    """
+    try:
+        if not body.answers:
+            raise ValidationError("Answers list cannot be empty")
+        
+        game_service = get_game_service()
+        game_id = game_service.save_game(body.answers)
+        
+        # Calculate stats
+        score = sum(1 for ans in body.answers if ans.get("is_correct", False))
+        total = len(body.answers)
+        accuracy = (score / total * 100) if total > 0 else 0
+        
+        return {
+            "game_id": game_id,
+            "score": score,
+            "total_questions": total,
+            "accuracy": accuracy
+        }
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error saving game: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save game")
+
+
+@router.get("/game/history")
+async def get_game_history(request: Request, limit: int = 10):
+    """
+    Get recent game history.
+    
+    Args:
+        limit: Number of games to retrieve (default 10, max 50)
+        
+    Returns:
+        List of game records with dates and scores
+    """
+    try:
+        if limit > 50:
+            limit = 50
+        if limit < 1:
+            limit = 1
+        
+        game_service = get_game_service()
+        history = game_service.get_game_history(limit)
+        
+        return {"games": history}
+    except Exception as e:
+        logger.error(f"Error getting game history: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve game history")
+
+
+@router.get("/game/stats")
+async def get_game_stats(request: Request):
+    """
+    Get aggregate game statistics and word mastery stats.
+    
+    Returns:
+        Dictionary with overall performance metrics
+    """
+    try:
+        game_service = get_game_service()
+        stats = game_service.get_game_stats()
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting game stats: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve game statistics")
+
+
+@router.get("/game/detail/{game_id}")
+async def get_game_detail(request: Request, game_id: int):
+    """
+    Get detailed information about a specific game.
+    
+    Args:
+        game_id: ID of the game to retrieve
+        
+    Returns:
+        Detailed game record with all answers
+    """
+    try:
+        game_service = get_game_service()
+        game = game_service.get_detailed_game(game_id)
+        
+        if not game:
+            raise HTTPException(status_code=404, detail="Game not found")
+        
+        return game
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting game detail: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve game details")
 
 
