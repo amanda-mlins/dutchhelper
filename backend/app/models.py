@@ -1,7 +1,7 @@
 """Pydantic models for request/response validation"""
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Any
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -47,7 +47,12 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, default="default_user")
+    email = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=True)
+    hashed_password = Column(String, nullable=True)  # Null for Google-only accounts
+    google_id = Column(String, unique=True, index=True, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     words = relationship("UserWord", back_populates="owner")
@@ -113,4 +118,33 @@ class UserWordSchema(UserWordBase):
         return v
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# --- Pydantic Schemas for Auth ---
+
+class UserRegister(BaseModel):
+    """Schema for user registration."""
+    email: EmailStr
+    password: str
+
+class UserLogin(BaseModel):
+    """Schema for user login."""
+    email: EmailStr
+    password: str
+
+class UserSchema(BaseModel):
+    """Schema for returning user info (never expose password)."""
+    id: int
+    email: str
+    username: Optional[str] = None
+    is_verified: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class TokenResponse(BaseModel):
+    """Schema for token response."""
+    access_token: str
+    token_type: str = "bearer"
+    user: UserSchema

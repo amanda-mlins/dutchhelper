@@ -41,6 +41,23 @@ class Settings(BaseSettings):
         description="Allowed CORS origins"
     )
 
+    # Auth / JWT Settings
+    JWT_SECRET_KEY: str = Field(
+        default="CHANGE_ME_IN_PRODUCTION_USE_openssl_rand_-hex_32",
+        description="Secret key for signing JWTs. MUST be changed in production."
+    )
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="Access token TTL in minutes")
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Refresh token TTL in days")
+
+    # Google OAuth Settings
+    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, description="Google OAuth client ID")
+    GOOGLE_CLIENT_SECRET: Optional[str] = Field(default=None, description="Google OAuth client secret")
+    GOOGLE_REDIRECT_URI: str = Field(
+        default="http://localhost:8000/api/auth/google/callback",
+        description="Google OAuth redirect URI registered in Google Cloud Console"
+    )
+
     # Validation
     @field_validator('LOG_LEVEL')
     @classmethod

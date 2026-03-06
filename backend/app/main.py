@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import router
+from app.auth_routes import auth_router
 from app.config import settings
 
 # Configure logging based on LOG_LEVEL setting
@@ -30,6 +31,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router)
+app.include_router(auth_router)
 
 @app.get("/")
 async def root():

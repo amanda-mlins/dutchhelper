@@ -37,7 +37,7 @@
 <script>
 import WordCard from '../components/WordCard.vue';
 import EditWordModal from '../components/EditWordModal.vue';
-import axios from 'axios';
+import { authAxios } from '../stores/auth.js';
 
 export default {
     name: 'WordBank',
@@ -62,7 +62,7 @@ export default {
             this.isLoading = true;
             this.error = null;
             try {
-                const response = await axios.get('/api/word-bank/words');
+                const response = await authAxios.get('/api/word-bank/words');
                 this.words = response.data;
             } catch (err) {
                 this.error = 'Failed to load words. Please try again later.';
@@ -76,7 +76,7 @@ export default {
             this.isAdding = true;
             this.addError = null;
             try {
-                await axios.post('/api/word-bank/words', { word: this.newWord });
+                await authAxios.post('/api/word-bank/words', { word: this.newWord });
                 this.newWord = '';
                 await this.fetchWords();
             } catch (err) {
@@ -97,8 +97,8 @@ export default {
         async deleteWord(wordId) {
             if (confirm('Are you sure you want to delete this word?')) {
                 try {
-                    await axios.delete(`/api/word-bank/words/${wordId}`);
-                    this.fetchWords(); // Refresh the list
+                    await authAxios.delete(`/api/word-bank/words/${wordId}`);
+                    this.fetchWords();
                 } catch (err) {
                     alert('Failed to delete word.');
                     console.error(err);
