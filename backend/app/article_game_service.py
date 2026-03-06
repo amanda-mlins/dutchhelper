@@ -1,336 +1,285 @@
-"""Service for managing article guessing game logic."""
+"""
+Article game service — stateless answer-checking + user-scoped history/stats.
 
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-import sqlite3
-from pathlib import Path
-from app.dutch_article_words import get_random_words, get_word_info, DUTCH_ARTICLE_WORDS
+Two modes:
+  guest  — random words from the default list, nothing persisted.
+  user   — words weighted by past mistakes + user's word bank, history saved.
+"""
+import random
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
+from sqlalchemy.orm import Session
+
+from app.dutch_article_words import DUTCH_ARTICLE_WORDS, get_random_words, get_word_info
+from app import models
+
+
+# ---------------------------------------------------------------------------
+# Stateless helpers (used by both guest and logged-in paths)
+# ---------------------------------------------------------------------------
+
+def get_guest_words(count: int) -> List[Dict[str, Any]]:
+    """Return a random selection from the default word list, article hidden."""
+    words = get_random_words(min(count, len(DUTCH_ARTICLE_WORDS)))
+    return _strip_article(words)
+
+
+def check_answer(word: str, user_answer: str) -> Dict[str, Any]:
+    """
+    Validate a single answer. Stateless — no DB writes.
+    Returns a dict the frontend can use directly.
+    """
+    info = get_word_info(word)
+    if not info:
+        return {"error": "Word not found", "word": word}
+
+    correct = info["article"]
+    is_correct = user_answer.lower() == correct
+
+    return {
+        "is_correct": is_correct,
+        "word": word,
+        "correct_article": correct,
+        "user_answer": user_answer.lower(),
+        "difficulty": info.get("difficulty", "unknown"),
+        "category": info.get("category", "unknown"),
+    }
+
+
+def _strip_article(words: List[Dict]) -> List[Dict]:
+    """Return word dicts without the article field (don't leak the answer)."""
+    return [
+        {k: v for k, v in w.items() if k != "article"}
+        for w in words
+    ]
+
+
+# ---------------------------------------------------------------------------
+# User-scoped service (requires a SQLAlchemy Session)
+# ---------------------------------------------------------------------------
 
 class ArticleGameService:
-    """Service for managing de/het article guessing game."""
-    
-    def __init__(self, db_path: str = "article_game.db"):
-        """Initialize the game service and setup database."""
-        self.db_path = db_path
-        self._init_database()
-    
-    def _init_database(self):
-        """Initialize the SQLite database for game history."""
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS games (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    word_count INTEGER,
-                    score INTEGER,
-                    total_questions INTEGER,
-                    accuracy REAL
-                )
-            """)
-            
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS game_answers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    game_id INTEGER NOT NULL,
-                    word TEXT NOT NULL,
-                    correct_article TEXT NOT NULL,
-                    user_answer TEXT NOT NULL,
-                    is_correct BOOLEAN,
-                    FOREIGN KEY (game_id) REFERENCES games(id)
-                )
-            """)
-            
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS word_stats (
-                    word TEXT PRIMARY KEY,
-                    times_seen INTEGER DEFAULT 0,
-                    times_correct INTEGER DEFAULT 0,
-                    times_incorrect INTEGER DEFAULT 0,
-                    accuracy REAL DEFAULT 0.0
-                )
-            """)
-            
-            conn.commit()
-    
-    def get_game_words(self, count: int = 20, personalized: bool = True) -> List[Dict[str, Any]]:
+    """All methods are scoped to a single authenticated user."""
+
+    def __init__(self, db: Session, user_id: int):
+        self.db = db
+        self.user_id = user_id
+
+    # ------------------------------------------------------------------
+    # Word selection
+    # ------------------------------------------------------------------
+
+    def get_words(self, count: int, mode: str = "smart") -> List[Dict[str, Any]]:
         """
-        Get words for a game session.
-        
-        Args:
-            count: Number of words (20, 30, or 50, defaults to 20)
-            personalized: If True, prioritize words user got wrong previously
-            
-        Returns:
-            List of word dictionaries with word, article, difficulty, category
+        Build a word list for a game.
+
+        mode values:
+          "smart"     — 40% mistakes + 30% word-bank nouns + 30% random
+          "mistakes"  — 70% mistakes + 30% random
+          "wordbank"  — 70% word-bank nouns + 30% random
+          "random"    — fully random from default list
         """
-        # Validate count
-        if count not in [20, 30, 50]:
-            count = 20
-        if count > len(DUTCH_ARTICLE_WORDS):
-            count = len(DUTCH_ARTICLE_WORDS)
-        
-        if personalized:
-            return self._get_personalized_words(count)
-        else:
-            return get_random_words(count)
-    
-    def _get_personalized_words(self, count: int) -> List[Dict[str, Any]]:
-        """Get personalized word selection based on user's history."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Get words with lowest accuracy (highest error rate)
-            cursor.execute("""
-                SELECT word FROM word_stats 
-                WHERE times_seen > 0
-                ORDER BY accuracy ASC
-                LIMIT ?
-            """, (count // 2,))  # Half from difficult words
-            
-            difficult_words = [row[0] for row in cursor.fetchall()]
-        
-        # Get word info for difficult words
+        count = max(5, min(count, len(DUTCH_ARTICLE_WORDS)))
+
+        if mode == "random":
+            return _strip_article(get_random_words(count))
+
+        mistake_words = self._get_mistake_words()
+        wordbank_words = self._get_wordbank_words()
+
+        if mode == "mistakes":
+            n_mistakes = int(count * 0.70)
+            n_random = count - n_mistakes
+            selected = self._pick(mistake_words, n_mistakes)
+        elif mode == "wordbank":
+            n_wb = int(count * 0.70)
+            n_random = count - n_wb
+            selected = self._pick(wordbank_words, n_wb)
+        else:  # smart
+            n_mistakes = int(count * 0.40)
+            n_wb = int(count * 0.30)
+            n_random = count - n_mistakes - n_wb
+            selected = self._pick(mistake_words, n_mistakes)
+            selected += self._pick(
+                [w for w in wordbank_words if w["word"] not in {x["word"] for x in selected}], n_wb
+            )
+
+        # Fill with random from default list, no duplicates
+        selected_words = {w["word"] for w in selected}
+        pool = [w for w in DUTCH_ARTICLE_WORDS if w["word"] not in selected_words]
+        random.shuffle(pool)
+        selected += pool[:n_random]
+        random.shuffle(selected)
+        return _strip_article(selected[:count])
+
+    def _get_mistake_words(self) -> List[Dict]:
+        """Return words the user has gotten wrong, weighted by error rate."""
+        rows = (
+            self.db.query(models.ArticleWordMistake)
+            .filter(
+                models.ArticleWordMistake.user_id == self.user_id,
+                models.ArticleWordMistake.times_wrong > 0,
+            )
+            .order_by(models.ArticleWordMistake.times_wrong.desc())
+            .limit(50)
+            .all()
+        )
         result = []
-        for word in difficult_words:
-            word_info = get_word_info(word)
-            if word_info:
-                result.append(word_info)
-        
-        # Fill remaining slots with random words
-        remaining = count - len(result)
-        if remaining > 0:
-            random_words = get_random_words(remaining)
-            result.extend(random_words)
-        
-        return result[:count]
-    
-    def submit_answer(self, word: str, user_answer: str) -> Dict[str, Any]:
-        """
-        Submit an answer for a word and check if it's correct.
-        
-        Args:
-            word: The Dutch word
-            user_answer: User's answer ('de' or 'het')
-            
-        Returns:
-            Dictionary with is_correct, correct_article, and explanation
-        """
-        word_info = get_word_info(word)
-        if not word_info:
-            return {
-                "is_correct": False,
-                "error": "Word not found in database",
-                "word": word
-            }
-        
-        correct_article = word_info["article"]
-        is_correct = user_answer.lower() == correct_article.lower()
-        
-        return {
-            "is_correct": is_correct,
-            "word": word,
-            "correct_article": correct_article,
-            "user_answer": user_answer.lower(),
-            "difficulty": word_info.get("difficulty", "unknown"),
-            "category": word_info.get("category", "unknown")
-        }
-    
-    def save_game(self, answers: List[Dict[str, Any]]) -> int:
-        """
-        Save a completed game to the database.
-        
-        Args:
-            answers: List of answer dictionaries from game
-            
-        Returns:
-            Game ID of the saved game
-        """
-        if not answers:
-            return -1
-        
-        # Calculate score and accuracy
-        score = sum(1 for ans in answers if ans.get("is_correct", False))
+        for row in rows:
+            info = get_word_info(row.word)
+            if info:
+                result.append(info)
+        return result
+
+    def _get_wordbank_words(self) -> List[Dict]:
+        """Return user's word-bank entries that appear in the article word list."""
+        user_words = (
+            self.db.query(models.UserWord)
+            .filter(models.UserWord.user_id == self.user_id)
+            .all()
+        )
+        result = []
+        for uw in user_words:
+            info = get_word_info(uw.word)
+            if info:
+                result.append(info)
+        return result
+
+    @staticmethod
+    def _pick(pool: List[Dict], n: int) -> List[Dict]:
+        """Pick up to n items from pool without replacement."""
+        return pool[:n] if len(pool) >= n else pool[:]
+
+    # ------------------------------------------------------------------
+    # Saving a completed game
+    # ------------------------------------------------------------------
+
+    def save_game(self, answers: List[Dict]) -> models.ArticleGameSession:
+        """Persist a completed game and update word-mistake counters."""
+        score = sum(1 for a in answers if a.get("is_correct"))
         total = len(answers)
-        accuracy = (score / total * 100) if total > 0 else 0
-        
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Insert game record
-            cursor.execute("""
-                INSERT INTO games (word_count, score, total_questions, accuracy)
-                VALUES (?, ?, ?, ?)
-            """, (total, score, total, accuracy))
-            
-            game_id = cursor.lastrowid
-            
-            # Insert answer records
-            for answer in answers:
-                cursor.execute("""
-                    INSERT INTO game_answers 
-                    (game_id, word, correct_article, user_answer, is_correct)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (
-                    game_id,
-                    answer.get("word", ""),
-                    answer.get("correct_article", ""),
-                    answer.get("user_answer", ""),
-                    answer.get("is_correct", False)
-                ))
-                
-                # Update word stats
-                word = answer.get("word", "").lower()
-                is_correct = answer.get("is_correct", False)
-                
-                cursor.execute("""
-                    SELECT times_seen, times_correct, times_incorrect FROM word_stats
-                    WHERE word = ?
-                """, (word,))
-                
-                row = cursor.fetchone()
-                if row:
-                    times_seen, times_correct, times_incorrect = row
-                    new_times_seen = times_seen + 1
-                    new_times_correct = times_correct + (1 if is_correct else 0)
-                    new_times_incorrect = times_incorrect + (0 if is_correct else 1)
-                    new_accuracy = (new_times_correct / new_times_seen * 100) if new_times_seen > 0 else 0
-                    
-                    cursor.execute("""
-                        UPDATE word_stats 
-                        SET times_seen = ?, times_correct = ?, times_incorrect = ?, accuracy = ?
-                        WHERE word = ?
-                    """, (new_times_seen, new_times_correct, new_times_incorrect, new_accuracy, word))
-                else:
-                    new_accuracy = 100.0 if is_correct else 0.0
-                    cursor.execute("""
-                        INSERT INTO word_stats (word, times_seen, times_correct, times_incorrect, accuracy)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (word, 1, 1 if is_correct else 0, 0 if is_correct else 1, new_accuracy))
-            
-            conn.commit()
-        
-        return game_id
-    
-    def get_game_history(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        Get recent game history.
-        
-        Args:
-            limit: Number of games to return
-            
-        Returns:
-            List of game records with score and accuracy
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT id, date_played, word_count, score, total_questions, accuracy
-                FROM games
-                ORDER BY date_played DESC
-                LIMIT ?
-            """, (limit,))
-            
-            return [dict(row) for row in cursor.fetchall()]
-    
-    def get_game_stats(self) -> Dict[str, Any]:
-        """
-        Get aggregate statistics about game performance.
-        
-        Returns:
-            Dictionary with overall stats
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            # Total games and average score
-            cursor.execute("""
-                SELECT COUNT(*) as total_games, AVG(accuracy) as avg_accuracy
-                FROM games
-            """)
-            game_stats = dict(cursor.fetchone())
-            
-            # Word stats
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as words_studied,
-                    SUM(times_seen) as total_attempts,
-                    AVG(accuracy) as avg_word_accuracy
-                FROM word_stats
-                WHERE times_seen > 0
-            """)
-            word_stats = dict(cursor.fetchone())
-            
-            # Most difficult words
-            cursor.execute("""
-                SELECT word, accuracy, times_seen
-                FROM word_stats
-                WHERE times_seen > 0
-                ORDER BY accuracy ASC
-                LIMIT 5
-            """)
-            most_difficult = [dict(row) for row in cursor.fetchall()]
-            
-            # Best words
-            cursor.execute("""
-                SELECT word, accuracy, times_seen
-                FROM word_stats
-                WHERE times_seen > 0
-                ORDER BY accuracy DESC
-                LIMIT 5
-            """)
-            best_words = [dict(row) for row in cursor.fetchall()]
-            
+        accuracy = round(score / total * 100) if total else 0
+
+        session = models.ArticleGameSession(
+            user_id=self.user_id,
+            played_at=datetime.now(timezone.utc),
+            word_count=total,
+            score=score,
+            accuracy=accuracy,
+        )
+        self.db.add(session)
+        self.db.flush()  # get session.id before adding answers
+
+        for ans in answers:
+            self.db.add(models.ArticleGameAnswer(
+                session_id=session.id,
+                word=ans.get("word", ""),
+                correct_article=ans.get("correct_article", ""),
+                user_answer=ans.get("user_answer", ""),
+                is_correct=bool(ans.get("is_correct")),
+            ))
+            self._update_mistake(ans.get("word", ""), bool(ans.get("is_correct")))
+
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
+    def _update_mistake(self, word: str, is_correct: bool) -> None:
+        row = (
+            self.db.query(models.ArticleWordMistake)
+            .filter_by(user_id=self.user_id, word=word)
+            .first()
+        )
+        if row is None:
+            row = models.ArticleWordMistake(
+                user_id=self.user_id,
+                word=word,
+                times_seen=0,
+                times_wrong=0,
+            )
+            self.db.add(row)
+
+        row.times_seen += 1
+        if not is_correct:
+            row.times_wrong += 1
+        row.last_seen_at = datetime.now(timezone.utc)
+
+    # ------------------------------------------------------------------
+    # Stats
+    # ------------------------------------------------------------------
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Return aggregate stats for the user's dashboard."""
+        sessions = (
+            self.db.query(models.ArticleGameSession)
+            .filter_by(user_id=self.user_id)
+            .all()
+        )
+
+        total_games = len(sessions)
+        if total_games == 0:
             return {
-                "total_games": game_stats.get("total_games", 0),
-                "avg_accuracy": game_stats.get("avg_accuracy", 0),
-                "words_studied": word_stats.get("words_studied", 0),
-                "total_attempts": word_stats.get("total_attempts", 0),
-                "avg_word_accuracy": word_stats.get("avg_word_accuracy", 0),
-                "most_difficult_words": most_difficult,
-                "best_words": best_words
+                "total_games": 0,
+                "avg_accuracy": 0,
+                "words_studied": 0,
+                "current_streak": 0,
+                "hardest_words": [],
+                "recent_games": [],
             }
-    
-    def get_detailed_game(self, game_id: int) -> Dict[str, Any]:
-        """
-        Get detailed information about a specific game.
-        
-        Args:
-            game_id: ID of the game
-            
-        Returns:
-            Game details including all answers
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            # Get game info
-            cursor.execute("""
-                SELECT id, date_played, word_count, score, total_questions, accuracy
-                FROM games
-                WHERE id = ?
-            """, (game_id,))
-            
-            game = cursor.fetchone()
-            if not game:
-                return None
-            
-            game_dict = dict(game)
-            
-            # Get answers for this game
-            cursor.execute("""
-                SELECT word, correct_article, user_answer, is_correct
-                FROM game_answers
-                WHERE game_id = ?
-                ORDER BY id ASC
-            """, (game_id,))
-            
-            game_dict["answers"] = [dict(row) for row in cursor.fetchall()]
-            
-            return game_dict
+
+        avg_accuracy = round(sum(s.accuracy for s in sessions) / total_games)
+        words_studied = (
+            self.db.query(models.ArticleWordMistake)
+            .filter_by(user_id=self.user_id)
+            .count()
+        )
+
+        hardest = (
+            self.db.query(models.ArticleWordMistake)
+            .filter(
+                models.ArticleWordMistake.user_id == self.user_id,
+                models.ArticleWordMistake.times_wrong > 0,
+            )
+            .order_by(models.ArticleWordMistake.times_wrong.desc())
+            .limit(5)
+            .all()
+        )
+
+        # Current streak — consecutive sessions with accuracy >= 70%
+        streak = 0
+        for s in sorted(sessions, key=lambda x: x.played_at, reverse=True):
+            if s.accuracy >= 70:
+                streak += 1
+            else:
+                break
+
+        recent = sorted(sessions, key=lambda x: x.played_at, reverse=True)[:5]
+
+        return {
+            "total_games": total_games,
+            "avg_accuracy": avg_accuracy,
+            "words_studied": words_studied,
+            "current_streak": streak,
+            "hardest_words": [
+                {
+                    "word": h.word,
+                    "times_wrong": h.times_wrong,
+                    "times_seen": h.times_seen,
+                    "correct_article": (get_word_info(h.word) or {}).get("article", "?"),
+                }
+                for h in hardest
+            ],
+            "recent_games": [
+                {
+                    "id": s.id,
+                    "played_at": s.played_at.isoformat(),
+                    "score": s.score,
+                    "word_count": s.word_count,
+                    "accuracy": s.accuracy,
+                }
+                for s in recent
+            ],
+        }
+
+        """Initialize the game service and setup database."""

@@ -10,9 +10,7 @@
                     Sentence Explainer<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                 </router-link>
                 <router-link to="/conjugator" class="nav-link">Verb Conjugator</router-link>
-                <router-link to="/article-game" class="nav-link" :class="{ locked: !auth.isAuthenticated }">
-                    Article Game<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
-                </router-link>
+                <router-link to="/article-game" class="nav-link">Article Game</router-link>
                 <router-link to="/word-bank" class="nav-link" :class="{ locked: !auth.isAuthenticated }">
                     Word Bank<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                 </router-link>

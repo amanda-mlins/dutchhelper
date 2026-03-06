@@ -119,6 +119,12 @@ export const useAuthStore = defineStore('auth', () => {
                 throw new Error('Failed to fetch user profile after Google login.')
             })
     }
+    function getAuthAxios() {
+        if (!accessToken.value) {
+            throw new Error('No access token available. User is not authenticated.')
+        }
+        return authAxios
+    }
 
     return {
         accessToken,
@@ -131,5 +137,6 @@ export const useAuthStore = defineStore('auth', () => {
         login,
         logout,
         handleGoogleCallback,
+        getAuthAxios
     }
 })

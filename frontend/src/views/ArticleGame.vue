@@ -1,72 +1,120 @@
 <template>
     <div class="article-game-container">
-        <!-- Rules/Explanation Section -->
         <ArticleGameRules />
 
-        <!-- Main Game Area -->
         <div class="game-section">
-            <!-- Setup Phase -->
-            <div v-if="gamePhase === 'setup'" class="game-setup">
-                <h2>Start a Game</h2>
-                <p class="subtitle">How many words would you like to practice?</p>
 
+            <!-- ══════════════════════════════════════════════
+                 SETUP PHASE
+            ══════════════════════════════════════════════ -->
+            <div v-if="gamePhase === 'setup'" class="game-setup">
+
+                <!-- ── Stats panel (logged-in only) ── -->
+                <div v-if="auth.isAuthenticated && stats" class="stats-panel">
+                    <h3>📊 Your Progress</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.total_games }}</div>
+                            <div class="stat-label">Games played</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.avg_accuracy }}%</div>
+                            <div class="stat-label">Avg accuracy</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.words_studied }}</div>
+                            <div class="stat-label">Words studied</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.current_streak }}🔥</div>
+                            <div class="stat-label">Win streak</div>
+                        </div>
+                    </div>
+
+                    <!-- Hardest words -->
+                    <div v-if="stats.hardest_words?.length" class="hardest-words">
+                        <h4>⚠️ Words to work on</h4>
+                        <div class="hw-list">
+                            <div v-for="hw in stats.hardest_words" :key="hw.word" class="hw-item">
+                                <span class="hw-word">{{ hw.word }}</span>
+                                <span class="hw-article">→ {{ hw.correct_article }}</span>
+                                <span class="hw-rate">{{ hw.times_wrong }}✗ / {{ hw.times_seen }}seen</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Game config ── -->
+                <div class="setup-header">
+                    <h2>Start a Game</h2>
+                    <span v-if="!auth.isAuthenticated" class="guest-badge">Guest mode</span>
+                </div>
+
+                <!-- Mode picker (logged-in only) -->
+                <div v-if="auth.isAuthenticated" class="mode-picker">
+                    <p class="mode-label">Game mode</p>
+                    <div class="mode-options">
+                        <button v-for="m in modes" :key="m.value" class="mode-btn"
+                            :class="{ active: gameMode === m.value }" @click="gameMode = m.value">
+                            <span class="mode-icon">{{ m.icon }}</span>
+                            <span class="mode-name">{{ m.label }}</span>
+                            <span class="mode-desc">{{ m.desc }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <p class="subtitle">How many words?</p>
                 <div class="word-count-options">
-                    <button v-for="count in [20, 30, 50]" :key="count" @click="startGame(count)" class="option-button">
+                    <button v-for="count in [5, 10, 20, 30, 50]" :key="count" class="option-button"
+                        @click="startGame(count)">
                         {{ count }} Words
                     </button>
                 </div>
 
-                <div class="options-checkbox">
-                    <label>
-                        <input v-model="personalizedGame" type="checkbox" />
-                        <span>Personalized game (focus on difficult words)</span>
-                    </label>
-                </div>
-
-                <!-- Recent Stats -->
-                <div v-if="stats && stats.total_games > 0" class="recent-stats">
-                    <h3>Your Progress</h3>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.total_games }}</div>
-                            <div class="stat-label">Games Played</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{{ (stats.avg_accuracy || 0).toFixed(1) }}%</div>
-                            <div class="stat-label">Average Accuracy</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.words_studied || 0 }}</div>
-                            <div class="stat-label">Words Studied</div>
+                <!-- Guest upsell banner -->
+                <div v-if="!auth.isAuthenticated" class="guest-upsell">
+                    <div class="upsell-icon">🚀</div>
+                    <div class="upsell-body">
+                        <p class="upsell-title">You're playing the basic version</p>
+                        <ul class="upsell-features">
+                            <li>✓ Random words — no personalisation</li>
+                            <li>✓ Mistakes shown at the end — not saved</li>
+                            <li>✗ <strong>No progress tracking or stats</strong></li>
+                            <li>✗ <strong>No smart practice (focus on your weak words)</strong></li>
+                            <li>✗ <strong>No Word Bank integration</strong></li>
+                        </ul>
+                        <div class="upsell-actions">
+                            <router-link to="/register" class="upsell-btn-primary">Create free account</router-link>
+                            <router-link to="/login" class="upsell-btn-secondary">Sign in</router-link>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Playing Phase -->
+            <!-- ══════════════════════════════════════════════
+                 PLAYING PHASE
+            ══════════════════════════════════════════════ -->
             <div v-else-if="gamePhase === 'playing'" class="game-playing">
-                <!-- Progress Bar -->
                 <div class="progress-section">
                     <div class="progress-info">
-                        <span>Question {{ currentQuestionIndex + 1 }} of {{ gameWords.length }}</span>
-                        <span>Score: {{ correctAnswers }} / {{ currentQuestionIndex }}</span>
+                        <span>{{ currentQuestionIndex + 1 }} / {{ gameWords.length }}</span>
+                        <span>✓ {{ correctAnswers }}</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill"
-                            :style="{ width: (currentQuestionIndex / gameWords.length * 100) + '%' }"></div>
+                            :style="{ width: (currentQuestionIndex / gameWords.length * 100) + '%' }">
+                        </div>
                     </div>
                 </div>
 
-                <!-- Word Display -->
                 <div class="word-display">
                     <div class="word-card">
                         <h3 class="word-text">{{ currentWord.word }}</h3>
-                        <p class="word-translation">🇺🇸 Translation: {{ currentWord.translation }}</p>
-                        <p class="word-hint">Category: {{ currentWord.category }}</p>
+                        <p class="word-translation">🇺🇸 {{ currentWord.translation }}</p>
+                        <p class="word-hint">{{ currentWord.category }}</p>
                     </div>
                 </div>
 
-                <!-- Answer Buttons -->
                 <div class="answer-buttons">
                     <button @click="submitAnswer('de')" :disabled="answering" class="answer-button de-button">
                         <span class="article">de</span>
@@ -78,17 +126,17 @@
                     </button>
                 </div>
 
-                <!-- Feedback -->
                 <div v-if="feedback" class="feedback"
                     :class="{ correct: feedback.is_correct, wrong: !feedback.is_correct }">
-                    <p v-if="feedback.is_correct" class="feedback-text">✓ Correct!</p>
-                    <p v-else class="feedback-text">✗ Wrong!</p>
-                    <p class="feedback-answer">The correct answer is: <strong>{{ feedback.correct_article }}</strong>
-                    </p>
+                    <p class="feedback-text">{{ feedback.is_correct ? '✓ Correct!' : '✗ Wrong!' }}</p>
+                    <p class="feedback-answer">Correct: <strong>{{ feedback.correct_article }} {{ currentWord.word
+                            }}</strong></p>
                 </div>
             </div>
 
-            <!-- Results Phase -->
+            <!-- ══════════════════════════════════════════════
+                 RESULTS PHASE
+            ══════════════════════════════════════════════ -->
             <div v-else-if="gamePhase === 'results'" class="game-results">
                 <div class="results-card">
                     <h2>Game Complete!</h2>
@@ -99,12 +147,11 @@
                             <div class="score-total">/ {{ gameAnswers.length }}</div>
                         </div>
                         <div class="accuracy-display">
-                            <div class="accuracy-percentage">{{ finalAccuracy.toFixed(1) }}%</div>
+                            <div class="accuracy-percentage">{{ Math.round(finalAccuracy) }}%</div>
                             <div class="accuracy-label">Accuracy</div>
                         </div>
                     </div>
 
-                    <!-- Performance Breakdown -->
                     <div class="performance-breakdown">
                         <div class="breakdown-item correct">
                             <span class="count">{{ finalScore }}</span>
@@ -116,227 +163,182 @@
                         </div>
                     </div>
 
-                    <!-- Mistakes Review -->
+                    <!-- Mistakes list -->
                     <div v-if="mistakes.length > 0" class="mistakes-section">
-                        <h3>Words to Review</h3>
+                        <h3>Words to review</h3>
                         <div class="mistakes-list">
-                            <div v-for="(mistake, idx) in mistakes" :key="idx" class="mistake-item">
-                                <span class="mistake-word">{{ mistake.word }}</span>
-                                <span class="mistake-answer">
-                                    You said: <strong>{{ mistake.user_answer }}</strong>
-                                </span>
-                                <span class="mistake-correct">
-                                    Correct: <strong>{{ mistake.correct_article }}</strong>
-                                </span>
+                            <div v-for="(m, i) in mistakes" :key="i" class="mistake-item">
+                                <span class="mistake-word">{{ m.word }}</span>
+                                <span class="mistake-answer">You: <strong>{{ m.user_answer }}</strong></span>
+                                <span class="mistake-correct">Correct: <strong>{{ m.correct_article }}</strong></span>
                             </div>
                         </div>
+                        <p v-if="auth.isAuthenticated" class="save-note">
+                            ✅ These {{ mistakes.length }} mistake{{ mistakes.length > 1 ? 's' : '' }}
+                            will appear more often in your next game.
+                        </p>
                     </div>
 
-                    <!-- Action Buttons -->
                     <div class="results-actions">
-                        <button @click="playAgain" class="action-button play-again">
-                            Play Again
-                        </button>
-                        <button @click="goHome" class="action-button go-home">
-                            Back to Home
-                        </button>
+                        <button @click="playAgain" class="action-button play-again">Play Again</button>
+                        <button @click="$router.push('/')" class="action-button go-home">Back to Home</button>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 </template>
 
-<script>
-import ArticleGameRules from '../components/ArticleGameRules.vue';
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { authAxios, useAuthStore } from '../stores/auth.js'
+import ArticleGameRules from '../components/ArticleGameRules.vue'
 
-export default {
-    name: 'ArticleGame',
-    components: {
-        ArticleGameRules
-    },
-    data() {
-        return {
-            gamePhase: 'setup', // 'setup', 'playing', 'results'
-            gameWords: [],
-            gameAnswers: [],
-            currentQuestionIndex: 0,
-            correctAnswers: 0,
-            personalizedGame: true,
-            feedback: null,
-            answering: false,
-            stats: null,
-            finalScore: 0,
-            finalAccuracy: 0,
-            mistakes: []
-        };
-    },
-    computed: {
-        currentWord() {
-            if (this.currentQuestionIndex < this.gameWords.length) {
-                return this.gameWords[this.currentQuestionIndex];
-            }
-            return { word: '', category: '' };
+const auth = useAuthStore()
+
+// ── state ────────────────────────────────────────────────────
+const gamePhase = ref('setup')
+const gameWords = ref([])
+const gameAnswers = ref([])
+const currentQuestionIndex = ref(0)
+const correctAnswers = ref(0)
+const feedback = ref(null)
+const answering = ref(false)
+const finalScore = ref(0)
+const finalAccuracy = ref(0)
+const mistakes = ref([])
+const stats = ref(null)
+const gameMode = ref('smart')
+
+// ── mode options (logged-in only) ───────────────────────────
+const modes = [
+    { value: 'smart', icon: '🧠', label: 'Smart', desc: 'Mix of your mistakes + word bank + random' },
+    { value: 'mistakes', icon: '⚠️', label: 'Mistakes', desc: 'Focus on words you get wrong' },
+    { value: 'wordbank', icon: '📚', label: 'Word Bank', desc: 'Words from your personal dictionary' },
+    { value: 'random', icon: '🎲', label: 'Random', desc: 'Fully random selection' },
+]
+
+// ── computed ─────────────────────────────────────────────────
+const currentWord = computed(() =>
+    gameWords.value[currentQuestionIndex.value] ?? { word: '', translation: '', category: '' }
+)
+
+// ── lifecycle ────────────────────────────────────────────────
+onMounted(async () => {
+    if (auth.isAuthenticated) {
+        await loadStats()
+    }
+})
+
+// ── methods ──────────────────────────────────────────────────
+async function loadStats() {
+    try {
+        const res = await auth.authAxios.get('/api/game/stats')
+        stats.value = res.data
+    } catch {
+        // not fatal
+    }
+}
+
+async function startGame(wordCount) {
+    try {
+        const payload = { count: wordCount, mode: auth.isAuthenticated ? gameMode.value : 'random' }
+        const headers = {}
+        let res
+
+        if (auth.isAuthenticated) {
+            let authAxios = auth.getAuthAxios()
+            res = await authAxios.post('/api/game/words', payload)
+        } else {
+            // guest — plain fetch, no auth header
+            const r = await fetch('/api/game/words', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+            res = { data: await r.json() }
         }
-    },
-    async mounted() {
-        // Load stats on mount
+
+        gameWords.value = res.data.words
+        gameAnswers.value = []
+        currentQuestionIndex.value = 0
+        correctAnswers.value = 0
+        feedback.value = null
+        mistakes.value = []
+        gamePhase.value = 'playing'
+    } catch (e) {
+        console.error(e)
+        alert('Failed to start game. Please try again.')
+    }
+}
+
+async function submitAnswer(answer) {
+    if (answering.value) return
+    answering.value = true
+
+    try {
+        const r = await fetch('/api/game/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ word: currentWord.value.word, user_answer: answer }),
+        })
+        const result = await r.json()
+
+        const record = {
+            word: currentWord.value.word,
+            correct_article: result.correct_article,
+            user_answer: answer,
+            is_correct: result.is_correct,
+        }
+        gameAnswers.value.push(record)
+        feedback.value = result
+        if (result.is_correct) correctAnswers.value++
+
+        setTimeout(() => {
+            currentQuestionIndex.value++
+            feedback.value = null
+            if (currentQuestionIndex.value >= gameWords.value.length) {
+                endGame()
+            }
+            answering.value = false
+        }, 1500)
+    } catch (e) {
+        console.error(e)
+        answering.value = false
+    }
+}
+
+async function endGame() {
+    const score = correctAnswers.value
+    const total = gameAnswers.value.length
+    finalScore.value = score
+    finalAccuracy.value = total ? (score / total) * 100 : 0
+    mistakes.value = gameAnswers.value.filter(a => !a.is_correct)
+
+    // Only save if logged in
+    if (auth.isAuthenticated) {
         try {
-            const response = await fetch('/api/game/stats');
-            if (response.ok) {
-                this.stats = await response.json();
-            }
-        } catch (error) {
-            console.error('Error loading stats:', error);
-        }
-    },
-    methods: {
-        async startGame(wordCount) {
-            try {
-                const response = await fetch('/api/game/words', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        count: wordCount,
-                        personalized: this.personalizedGame
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to load game words');
-                }
-
-                const data = await response.json();
-                this.gameWords = data.words;
-                this.gameAnswers = [];
-                this.currentQuestionIndex = 0;
-                this.correctAnswers = 0;
-                this.feedback = null;
-                this.gamePhase = 'playing';
-            } catch (error) {
-                console.error('Error starting game:', error);
-                alert('Failed to start game. Please try again.');
-            }
-        },
-
-        async submitAnswer(answer) {
-            if (this.answering) return;
-
-            this.answering = true;
-
-            try {
-                const response = await fetch('/api/game/submit', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        word: this.currentWord.word,
-                        user_answer: answer
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to submit answer');
-                }
-
-                const result = await response.json();
-
-                // Store the answer with result
-                const answerRecord = {
-                    word: this.currentWord.word,
-                    correct_article: result.correct_article,
-                    user_answer: answer,
-                    is_correct: result.is_correct
-                };
-
-                this.gameAnswers.push(answerRecord);
-                this.feedback = result;
-
-                // Update score
-                if (result.is_correct) {
-                    this.correctAnswers++;
-                }
-
-                // Move to next question after delay
-                setTimeout(() => {
-                    this.currentQuestionIndex++;
-                    this.feedback = null;
-
-                    if (this.currentQuestionIndex >= this.gameWords.length) {
-                        this.endGame();
-                    }
-
-                    this.answering = false;
-                }, 2000);
-            } catch (error) {
-                console.error('Error submitting answer:', error);
-                alert('Error submitting answer. Please try again.');
-                this.answering = false;
-            }
-        },
-
-        async endGame() {
-            try {
-                // Save game to database
-                const response = await fetch('/api/game/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        answers: this.gameAnswers
-                    })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    this.finalScore = result.score;
-                    this.finalAccuracy = result.accuracy;
-                }
-            } catch (error) {
-                console.error('Error saving game:', error);
-                this.finalScore = this.correctAnswers;
-                this.finalAccuracy = (this.correctAnswers / this.gameAnswers.length * 100);
-            }
-
-            // Extract mistakes
-            this.mistakes = this.gameAnswers.filter(ans => !ans.is_correct);
-
-            this.gamePhase = 'results';
-        },
-
-        playAgain() {
-            this.gamePhase = 'setup';
-            this.gameWords = [];
-            this.gameAnswers = [];
-            this.currentQuestionIndex = 0;
-            this.correctAnswers = 0;
-            this.feedback = null;
-            this.mistakes = [];
-
-            // Reload stats
-            this.loadStats();
-        },
-
-        goHome() {
-            this.$router.push('/');
-        },
-
-        async loadStats() {
-            try {
-                const response = await fetch('/api/game/stats');
-                if (response.ok) {
-                    this.stats = await response.json();
-                }
-            } catch (error) {
-                console.error('Error loading stats:', error);
-            }
+            let authAxios = auth.getAuthAxios()
+            await authAxios.post('/api/game/save', { answers: gameAnswers.value })
+            await loadStats()   // refresh stats panel for next setup screen
+        } catch (e) {
+            console.error('Failed to save game', e)
         }
     }
-};
+
+    gamePhase.value = 'results'
+}
+
+function playAgain() {
+    gamePhase.value = 'setup'
+    gameWords.value = []
+    gameAnswers.value = []
+    currentQuestionIndex.value = 0
+    correctAnswers.value = 0
+    feedback.value = null
+    mistakes.value = []
+}
 </script>
 
 <style scoped>
@@ -353,108 +355,289 @@ export default {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Setup Phase */
+/* ── Setup ──────────────────────────────────────────────── */
 .game-setup h2 {
-    font-size: 28px;
+    font-size: 26px;
     margin-bottom: 10px;
     color: #333;
 }
 
 .subtitle {
-    font-size: 16px;
-    color: #666;
-    margin-bottom: 30px;
-}
-
-.word-count-options {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 25px;
-    flex-wrap: wrap;
-}
-
-.option-button {
-    padding: 15px 30px;
-    font-size: 16px;
-    border: 2px solid #007bff;
-    background: white;
-    color: #007bff;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 500;
-}
-
-.option-button:hover {
-    background: #007bff;
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
-}
-
-.options-checkbox {
-    margin-bottom: 30px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.options-checkbox label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
     font-size: 15px;
-    color: #555;
+    color: #666;
+    margin-bottom: 20px;
 }
 
-.options-checkbox input {
-    margin-right: 10px;
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
+/* Stats panel */
+.stats-panel {
+    background: #f0f4ff;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 28px;
 }
 
-/* Stats Section */
-.recent-stats {
-    margin-top: 30px;
-    padding-top: 30px;
-    border-top: 1px solid #eee;
-}
-
-.recent-stats h3 {
-    font-size: 18px;
-    margin-bottom: 15px;
-    color: #333;
+.stats-panel h3 {
+    margin: 0 0 16px;
+    font-size: 16px;
+    color: #444;
 }
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
 }
 
 .stat-card {
-    background: #f8f9fa;
-    padding: 15px;
+    background: white;
+    padding: 14px 10px;
     border-radius: 8px;
     text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
 }
 
 .stat-number {
-    font-size: 24px;
-    font-weight: bold;
-    color: #007bff;
+    font-size: 22px;
+    font-weight: 700;
+    color: #667eea;
 }
 
 .stat-label {
-    font-size: 13px;
-    color: #666;
-    margin-top: 5px;
+    font-size: 11px;
+    color: #777;
+    margin-top: 4px;
 }
 
-/* Playing Phase */
+.hardest-words h4 {
+    font-size: 13px;
+    color: #e53e3e;
+    margin: 0 0 10px;
+}
+
+.hw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hw-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.hw-word {
+    font-weight: 700;
+    flex: 0 0 100px;
+}
+
+.hw-article {
+    color: #38a169;
+    flex: 0 0 60px;
+}
+
+.hw-rate {
+    color: #e53e3e;
+    margin-left: auto;
+}
+
+/* Mode picker */
+.mode-picker {
+    margin-bottom: 24px;
+}
+
+.mode-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #444;
+    margin-bottom: 10px;
+}
+
+.mode-options {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.mode-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.mode-btn:hover {
+    border-color: #667eea;
+}
+
+.mode-btn.active {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
+.mode-icon {
+    font-size: 20px;
+}
+
+.mode-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+}
+
+.mode-desc {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.3;
+}
+
+/* Word count buttons */
+.word-count-options {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.option-button {
+    padding: 14px 28px;
+    font-size: 16px;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.option-button:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Setup header row */
+.setup-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.setup-header h2 {
+    font-size: 26px;
+    color: #333;
+    margin: 0;
+}
+
+.guest-badge {
+    background: #718096;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Guest upsell banner */
+.guest-upsell {
+    display: flex;
+    gap: 16px;
+    background: linear-gradient(135deg, #667eea11 0%, #764ba222 100%);
+    border: 1.5px solid #667eea44;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.upsell-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.upsell-body {
+    flex: 1;
+}
+
+.upsell-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 0 0 10px;
+}
+
+.upsell-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 13.5px;
+    color: #4a5568;
+}
+
+.upsell-features li strong {
+    color: #2d3748;
+}
+
+.upsell-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.upsell-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 9px 20px;
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: opacity 0.2s;
+}
+
+.upsell-btn-primary:hover {
+    opacity: 0.88;
+}
+
+.upsell-btn-secondary {
+    background: white;
+    color: #667eea;
+    border: 1.5px solid #667eea;
+    padding: 8px 18px;
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.upsell-btn-secondary:hover {
+    background: #f0f4ff;
+}
+
+/* ── Playing ────────────────────────────────────────────── */
 .progress-section {
-    margin-bottom: 30px;
+    margin-bottom: 24px;
 }
 
 .progress-info {
@@ -462,7 +645,7 @@ export default {
     justify-content: space-between;
     font-size: 14px;
     color: #666;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .progress-bar {
@@ -475,13 +658,13 @@ export default {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #007bff, #0056b3);
+    background: linear-gradient(90deg, #667eea, #764ba2);
     transition: width 0.3s ease;
 }
 
 .word-display {
     text-align: center;
-    margin: 40px 0;
+    margin: 36px 0;
 }
 
 .word-card {
@@ -494,28 +677,29 @@ export default {
 .word-text {
     font-size: 48px;
     font-weight: 300;
-    margin: 0 0 10px 0;
+    margin: 0 0 10px;
     letter-spacing: 2px;
 }
 
 .word-translation {
-    font-size: 18px;
+    font-size: 17px;
     opacity: 0.85;
-    margin: 0 0 15px 0;
+    margin: 0 0 12px;
     font-style: italic;
 }
 
 .word-hint {
-    font-size: 14px;
-    opacity: 0.9;
+    font-size: 13px;
+    opacity: 0.75;
     margin: 0;
+    text-transform: capitalize;
 }
 
 .answer-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
-    margin: 30px 0;
+    margin: 28px 0;
 }
 
 .answer-button {
@@ -524,7 +708,7 @@ export default {
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -533,25 +717,25 @@ export default {
 }
 
 .de-button {
-    background: #28a745;
+    background: #38a169;
     color: white;
 }
 
 .de-button:hover:not(:disabled) {
-    background: #218838;
+    background: #2f855a;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    box-shadow: 0 4px 12px rgba(56, 161, 105, 0.3);
 }
 
 .het-button {
-    background: #ffc107;
-    color: #333;
+    background: #d69e2e;
+    color: white;
 }
 
 .het-button:hover:not(:disabled) {
-    background: #e0a800;
+    background: #b7791f;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+    box-shadow: 0 4px 12px rgba(214, 158, 46, 0.3);
 }
 
 .answer-button:disabled {
@@ -560,8 +744,8 @@ export default {
 }
 
 .article {
-    font-size: 20px;
-    font-weight: bold;
+    font-size: 22px;
+    font-weight: 700;
 }
 
 .article-label {
@@ -570,29 +754,28 @@ export default {
 }
 
 .feedback {
-    margin-top: 20px;
-    padding: 15px;
+    padding: 14px;
     border-radius: 8px;
     text-align: center;
-    animation: slideIn 0.3s ease;
+    animation: slideIn 0.25s ease;
 }
 
 .feedback.correct {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
+    background: #c6f6d5;
+    color: #276749;
+    border: 1px solid #9ae6b4;
 }
 
 .feedback.wrong {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+    background: #fed7d7;
+    color: #9b2c2c;
+    border: 1px solid #feb2b2;
 }
 
 .feedback-text {
     font-size: 18px;
-    font-weight: bold;
-    margin: 0 0 8px 0;
+    font-weight: 700;
+    margin: 0 0 6px;
 }
 
 .feedback-answer {
@@ -603,7 +786,7 @@ export default {
 @keyframes slideIn {
     from {
         opacity: 0;
-        transform: translateY(-10px);
+        transform: translateY(-8px);
     }
 
     to {
@@ -612,100 +795,95 @@ export default {
     }
 }
 
-/* Results Phase */
+/* ── Results ────────────────────────────────────────────── */
 .game-results {
     text-align: center;
 }
 
-.results-card {
-    background: white;
-}
-
 .results-card h2 {
     font-size: 28px;
-    margin-bottom: 30px;
+    margin-bottom: 28px;
     color: #333;
 }
 
 .score-display {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    margin-bottom: 40px;
+    gap: 24px;
+    margin-bottom: 28px;
 }
 
 .large-score {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 30px;
+    padding: 28px;
     border-radius: 12px;
 }
 
 .score-number {
     font-size: 48px;
-    font-weight: bold;
+    font-weight: 700;
 }
 
 .score-total {
-    font-size: 20px;
-    opacity: 0.9;
+    font-size: 18px;
+    opacity: 0.85;
 }
 
 .accuracy-display {
     background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     color: white;
-    padding: 30px;
+    padding: 28px;
     border-radius: 12px;
 }
 
 .accuracy-percentage {
     font-size: 48px;
-    font-weight: bold;
+    font-weight: 700;
 }
 
 .accuracy-label {
-    font-size: 16px;
-    opacity: 0.9;
+    font-size: 15px;
+    opacity: 0.85;
 }
 
 .performance-breakdown {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin: 30px 0;
+    gap: 16px;
+    margin: 24px 0;
 }
 
 .breakdown-item {
-    padding: 20px;
+    padding: 18px;
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .breakdown-item.correct {
-    background: #d4edda;
-    color: #155724;
+    background: #c6f6d5;
+    color: #276749;
 }
 
 .breakdown-item.wrong {
-    background: #f8d7da;
-    color: #721c24;
+    background: #fed7d7;
+    color: #9b2c2c;
 }
 
 .count {
     font-size: 32px;
-    font-weight: bold;
+    font-weight: 700;
 }
 
 .label {
     font-size: 14px;
 }
 
-/* Mistakes Section */
 .mistakes-section {
     text-align: left;
-    margin: 30px 0;
+    margin: 24px 0;
     padding: 20px;
     background: #f8f9fa;
     border-radius: 8px;
@@ -713,82 +891,94 @@ export default {
 
 .mistakes-section h3 {
     margin-top: 0;
-    font-size: 18px;
+    font-size: 17px;
     color: #333;
 }
 
 .mistakes-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .mistake-item {
     background: white;
-    padding: 12px;
+    padding: 10px 14px;
     border-left: 4px solid #f5576c;
     border-radius: 4px;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 15px;
+    gap: 12px;
     font-size: 14px;
 }
 
 .mistake-word {
-    font-weight: bold;
+    font-weight: 700;
     color: #333;
 }
 
 .mistake-answer {
-    color: #721c24;
+    color: #9b2c2c;
 }
 
 .mistake-correct {
-    color: #155724;
+    color: #276749;
 }
 
-/* Results Actions */
+.save-note {
+    margin: 12px 0 0;
+    font-size: 13px;
+    color: #38a169;
+    font-style: italic;
+}
+
 .results-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    margin-top: 30px;
+    gap: 14px;
+    margin-top: 28px;
 }
 
 .action-button {
-    padding: 15px;
+    padding: 14px;
     font-size: 16px;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 500;
+    font-weight: 600;
+    transition: all 0.2s;
 }
 
 .play-again {
-    background: #007bff;
+    background: #667eea;
     color: white;
 }
 
 .play-again:hover {
-    background: #0056b3;
+    background: #5a67d8;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
 }
 
 .go-home {
-    background: #6c757d;
+    background: #718096;
     color: white;
 }
 
 .go-home:hover {
-    background: #5a6268;
+    background: #4a5568;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 700px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .mode-options {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
     .word-count-options {
         flex-direction: column;
     }
@@ -799,10 +989,6 @@ export default {
 
     .word-text {
         font-size: 36px;
-    }
-
-    .word-translation {
-        font-size: 16px;
     }
 
     .answer-buttons {

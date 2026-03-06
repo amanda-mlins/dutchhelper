@@ -42,16 +42,13 @@
             </p>
           </component>
 
-          <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
-            v-bind="auth.isAuthenticated ? { to: '/article-game' } : {}" class="tool-card"
-            :class="{ 'tool-card--locked': !auth.isAuthenticated }">
+          <router-link to="/article-game" class="tool-card">
             <div class="card-header">
               <h3>🎮 Article Game</h3>
-              <span v-if="!auth.isAuthenticated" class="lock-badge">🔒 Login required</span>
             </div>
             <p>Master Dutch articles! Practice guessing whether words use "de" or "het" with interactive games and
               progress tracking.</p>
-          </component>
+          </router-link>
 
           <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
             v-bind="auth.isAuthenticated ? { to: '/word-bank' } : {}" class="tool-card"

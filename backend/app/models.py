@@ -56,6 +56,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     words = relationship("UserWord", back_populates="owner")
+    game_sessions = relationship("ArticleGameSession", back_populates="user")
+    word_mistakes = relationship("ArticleWordMistake", back_populates="user")
 
 class UserWord(Base):
     __tablename__ = 'user_words'
@@ -148,3 +150,47 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserSchema
+
+# --- Article Game ORM models ---
+
+class ArticleGameSession(Base):
+    """One completed article game for a logged-in user."""
+    __tablename__ = "article_game_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    played_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    word_count = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)
+    accuracy = Column(Integer, nullable=False)  # 0-100 integer percent
+
+    user = relationship("User", back_populates="game_sessions")
+    answers = relationship("ArticleGameAnswer", back_populates="session", cascade="all, delete-orphan")
+
+
+class ArticleGameAnswer(Base):
+    """One answer within a game session."""
+    __tablename__ = "article_game_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("article_game_sessions.id"), nullable=False)
+    word = Column(String, nullable=False)
+    correct_article = Column(String, nullable=False)
+    user_answer = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+
+    session = relationship("ArticleGameSession", back_populates="answers")
+
+
+class ArticleWordMistake(Base):
+    """Cumulative mistake tracker per user per word."""
+    __tablename__ = "article_word_mistakes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    word = Column(String, nullable=False)
+    times_seen = Column(Integer, default=0, nullable=False)
+    times_wrong = Column(Integer, default=0, nullable=False)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="word_mistakes")

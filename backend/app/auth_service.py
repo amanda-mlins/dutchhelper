@@ -149,6 +149,25 @@ def get_current_user(
         )
     return user
 
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[models.User]:
+    """
+    Like get_current_user but returns None instead of raising 401
+    when no token is present. Used for optional-auth endpoints (e.g. game/words).
+    """
+    if credentials is None:
+        return None
+    try:
+        user_id = _decode_token(credentials.credentials, "access")
+    except HTTPException:
+        return None
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None or not user.is_active:
+        return None
+    return user
+
 def get_current_user_from_refresh_cookie(request: Request, db: Session = Depends(get_db)) -> models.User:
     """
     Dependency: reads the refresh token from the httpOnly cookie,

@@ -57,7 +57,8 @@ const routes = [
   {
     path: '/article-game',
     name: 'ArticleGame',
-    component: ArticleGame
+    component: ArticleGame,
+    meta: { public: true }
   },
   {
     path: '/word-bank',
