@@ -3,6 +3,7 @@ import Home from './views/Home.vue'
 import SentenceExplainer from './views/SentenceExplainer.vue'
 import Conjugator from './views/Conjugator.vue'
 import ArticleGame from './views/ArticleGame.vue'
+import ArticleGameStats from './views/ArticleGameStats.vue'
 import WordBank from './views/WordBank.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
@@ -59,6 +60,11 @@ const routes = [
     name: 'ArticleGame',
     component: ArticleGame,
     meta: { public: true }
+  },
+  {
+    path: '/article-game/stats',
+    name: 'ArticleGameStats',
+    component: ArticleGameStats,
   },
   {
     path: '/word-bank',

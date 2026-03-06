@@ -391,6 +391,16 @@ def api_get_game_stats(
     return svc.get_stats()
 
 
+@router.get("/game/history")
+def api_get_game_history(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all game sessions with per-answer detail. Requires login."""
+    svc = ArticleGameService(db, current_user.id)
+    return svc.get_history()
+
+
 # --- Word Bank API Endpoints (require authentication) ---
 
 @router.post("/word-bank/words", response_model=models.UserWordSchema, status_code=201)

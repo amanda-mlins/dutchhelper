@@ -282,4 +282,35 @@ class ArticleGameService:
             ],
         }
 
-        """Initialize the game service and setup database."""
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Return all sessions newest-first, each with their per-answer breakdown."""
+        sessions = (
+            self.db.query(models.ArticleGameSession)
+            .filter_by(user_id=self.user_id)
+            .order_by(models.ArticleGameSession.played_at.desc())
+            .all()
+        )
+        result = []
+        for s in sessions:
+            answers = (
+                self.db.query(models.ArticleGameAnswer)
+                .filter_by(session_id=s.id)
+                .all()
+            )
+            result.append({
+                "id": s.id,
+                "played_at": s.played_at.isoformat(),
+                "score": s.score,
+                "word_count": s.word_count,
+                "accuracy": s.accuracy,
+                "answers": [
+                    {
+                        "word": a.word,
+                        "correct_article": a.correct_article,
+                        "user_answer": a.user_answer,
+                        "is_correct": a.is_correct,
+                    }
+                    for a in answers
+                ],
+            })
+        return result

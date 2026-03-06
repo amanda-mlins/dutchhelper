@@ -9,40 +9,7 @@
             ══════════════════════════════════════════════ -->
             <div v-if="gamePhase === 'setup'" class="game-setup">
 
-                <!-- ── Stats panel (logged-in only) ── -->
-                <div v-if="auth.isAuthenticated && stats" class="stats-panel">
-                    <h3>📊 Your Progress</h3>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.total_games }}</div>
-                            <div class="stat-label">Games played</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.avg_accuracy }}%</div>
-                            <div class="stat-label">Avg accuracy</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.words_studied }}</div>
-                            <div class="stat-label">Words studied</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number">{{ stats.current_streak }}🔥</div>
-                            <div class="stat-label">Win streak</div>
-                        </div>
-                    </div>
 
-                    <!-- Hardest words -->
-                    <div v-if="stats.hardest_words?.length" class="hardest-words">
-                        <h4>⚠️ Words to work on</h4>
-                        <div class="hw-list">
-                            <div v-for="hw in stats.hardest_words" :key="hw.word" class="hw-item">
-                                <span class="hw-word">{{ hw.word }}</span>
-                                <span class="hw-article">→ {{ hw.correct_article }}</span>
-                                <span class="hw-rate">{{ hw.times_wrong }}✗ / {{ hw.times_seen }}seen</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- ── Game config ── -->
                 <div class="setup-header">
@@ -89,6 +56,45 @@
                         </div>
                     </div>
                 </div>
+                <!-- ── Stats panel (logged-in only) ── -->
+                <div v-if="auth.isAuthenticated && stats" class="stats-panel">
+                    <div class="stats-panel-header">
+                        <h3>📊 Your Progress</h3>
+                        <router-link to="/article-game/stats" class="stats-full-link">
+                            View full stats →
+                        </router-link>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.total_games }}</div>
+                            <div class="stat-label">Games played</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.avg_accuracy }}%</div>
+                            <div class="stat-label">Avg accuracy</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.words_studied }}</div>
+                            <div class="stat-label">Words studied</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">{{ stats.current_streak }}🔥</div>
+                            <div class="stat-label">Win streak</div>
+                        </div>
+                    </div>
+
+                    <!-- Hardest words -->
+                    <div v-if="stats.hardest_words?.length" class="hardest-words">
+                        <h4>⚠️ Words to work on</h4>
+                        <div class="hw-list">
+                            <div v-for="hw in stats.hardest_words" :key="hw.word" class="hw-item">
+                                <span class="hw-word">{{ hw.word }}</span>
+                                <span class="hw-article">→ {{ hw.correct_article }}</span>
+                                <span class="hw-rate">{{ hw.times_wrong }}✗ / {{ hw.times_seen }}seen</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- ══════════════════════════════════════════════
@@ -130,7 +136,7 @@
                     :class="{ correct: feedback.is_correct, wrong: !feedback.is_correct }">
                     <p class="feedback-text">{{ feedback.is_correct ? '✓ Correct!' : '✗ Wrong!' }}</p>
                     <p class="feedback-answer">Correct: <strong>{{ feedback.correct_article }} {{ currentWord.word
-                            }}</strong></p>
+                    }}</strong></p>
                 </div>
             </div>
 
@@ -234,7 +240,8 @@ onMounted(async () => {
 // ── methods ──────────────────────────────────────────────────
 async function loadStats() {
     try {
-        const res = await auth.authAxios.get('/api/game/stats')
+        let authAxios = auth.getAuthAxios()
+        const res = await authAxios.get('/api/game/stats')
         stats.value = res.data
     } catch {
         // not fatal
@@ -376,11 +383,32 @@ function playAgain() {
     margin-bottom: 28px;
 }
 
-.stats-panel h3 {
-    margin: 0 0 16px;
+.stats-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.stats-panel-header h3 {
+    margin: 0;
     font-size: 16px;
     color: #444;
 }
+
+.stats-full-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: #667eea;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.stats-full-link:hover {
+    text-decoration: underline;
+}
+
+/* Remove old h3 rule now covered by .stats-panel-header h3 */
 
 .stats-grid {
     display: grid;
