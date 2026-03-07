@@ -45,6 +45,7 @@ dutchhelper/
 5. Click **"Deploy Now"** — the first build will start
 
 > The `railway.json` at the repo root controls everything:
+>
 > - **Build:** `pip install -r backend/requirements.txt`
 > - **Start:** `cd backend && python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers`
 > - **Health check:** `GET /health` (must return 200 before traffic is routed)
@@ -84,6 +85,7 @@ Do **not** add `DATABASE_URL` — it is injected automatically by the PostgreSQL
 | `GOOGLE_REDIRECT_URI` | `https://your-railway-app.railway.app/api/auth/google/callback` |
 
 > **Generate a fresh JWT secret:**
+>
 > ```bash
 > openssl rand -hex 32
 > ```
@@ -97,6 +99,7 @@ https://your-railway-app.railway.app/health
 ```
 
 Expected response:
+
 ```json
 {"status": "ok", "database": "reachable"}
 ```
@@ -168,11 +171,13 @@ Railway will redeploy automatically.
 In [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → your OAuth 2.0 client:
 
 **Authorised JavaScript origins** — add:
+
 ```
 https://your-netlify-app.netlify.app
 ```
 
 **Authorised redirect URIs** — add:
+
 ```
 https://your-railway-app.railway.app/api/auth/google/callback
 ```
@@ -224,21 +229,26 @@ git push
 ## Troubleshooting
 
 ### Backend won't start
+
 - Check **Deploy Logs** in Railway for the full traceback
 - Most common cause: missing or invalid environment variable (especially `JWT_SECRET_KEY`)
 - The app will refuse to start if `JWT_SECRET_KEY` is a placeholder — generate a real one with `openssl rand -hex 32`
 
 ### `/health` returns 503
+
 - Database is unreachable — check that the PostgreSQL plugin is attached and `DATABASE_URL` is injected
 - Check that the Alembic migration ran successfully in the deploy log
 
 ### CORS errors in the browser
+
 - `ALLOWED_ORIGINS` in Railway must exactly match the Netlify URL (including `https://`, no trailing slash)
 
 ### Google OAuth redirect mismatch
+
 - `GOOGLE_REDIRECT_URI` in Railway must exactly match the URI registered in Google Cloud Console
 
 ### Frontend shows blank page or API errors
+
 - Check that `VITE_API_URL` is set correctly in Netlify's environment variables
 - Trigger a fresh Netlify deploy after updating the variable
 
