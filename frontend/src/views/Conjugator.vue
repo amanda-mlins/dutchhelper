@@ -65,7 +65,7 @@
                                 <span v-for="(syn, idx) in conjugation.synonyms" :key="`syn-${idx}`"
                                     class="word-tag synonym-tag">
                                     <router-link :to="`/conjugator/${syn}`">{{ syn
-                                    }}</router-link>
+                                        }}</router-link>
                                 </span>
                             </div>
                         </div>
@@ -294,7 +294,7 @@ export default {
                 if (err.response?.data?.detail) {
                     this.error = err.response.data.detail
                 } else if (err.message === 'Network Error') {
-                    this.error = 'Backend is not running. Make sure the server is started on http://localhost:8000'
+                    this.error = 'Could not connect to the backend. Please try again later.'
                 } else if (err.response?.status === 404) {
                     this.error = `Verb "${this.inputVerb}" not found. Try with a common Dutch verb.`
                 } else {
