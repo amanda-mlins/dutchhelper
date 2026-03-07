@@ -20,7 +20,7 @@ from app.nlp_service import NLPService
 from app.verb_conjugation_service import VerbConjugationService
 from app.article_game_service import ArticleGameService, get_guest_words, check_answer
 from app.exceptions import ValidationError, ProcessingError
-from app.auth_service import get_current_user, get_current_user_optional
+from app.auth_service import get_current_user, get_current_user_optional, get_admin_user
 from app.database import get_db, init_db
 from app.word_list_service import WordListService
 from . import models
@@ -251,18 +251,13 @@ async def conjugate_verb(request: Request, body: ConjugateVerbRequest):
         raise HTTPException(status_code=500, detail="Something went wrong. Please try again in a moment.")
 
 @router.get("/database-stats")
-async def get_database_stats(request: Request):
+async def get_database_stats(
+    request: Request,
+    _admin: models.User = Depends(get_admin_user),
+):
     """
-    Get statistics about the verb conjugation database (admin endpoint).
-    
-    Returns information about:
-    - Total verbs in database
-    - Database size
-    - Most frequently queried verbs
-    - Estimated API savings
-    
-    Returns:
-        Dictionary with database statistics
+    Get statistics about the verb conjugation database.
+    Requires authentication + admin flag.
     """
     try:
         from app.verb_database_manager import VerbDatabaseManager
@@ -282,15 +277,13 @@ async def get_database_stats(request: Request):
 
 
 @router.post("/database-export")
-async def export_database(request: Request):
+async def export_database(
+    request: Request,
+    _admin: models.User = Depends(get_admin_user),
+):
     """
-    Export all verbs to a JSON file for version control (admin endpoint).
-    
-    This creates a JSON snapshot of all verbs in the database, which can be
-    tracked in git for backup and portability.
-    
-    Returns:
-        Dictionary with export path and summary
+    Export all verbs to a JSON file for version control.
+    Requires authentication + admin flag.
     """
     try:
         from app.verb_database_manager import VerbDatabaseManager

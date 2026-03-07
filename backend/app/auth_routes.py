@@ -27,8 +27,7 @@ from app import models
 from app.auth_service import (
     authenticate_user,
     create_access_token,
-    create_refresh_token,
-    create_or_update_google_user,
+    create_refresh_token,    create_or_update_google_user,
     create_user_with_password,
     get_current_user,
     get_current_user_from_refresh_cookie,
@@ -36,6 +35,7 @@ from app.auth_service import (
 )
 from app.config import settings
 from app.database import get_db
+from app.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         key=_COOKIE_NAME,
         value=token,
         httponly=True,           # Not readable by JavaScript
-        secure=True,             # Only sent over HTTPS (set to False in dev if needed)
+        secure=not settings.DEBUG,   # False in dev (HTTP), True in prod (HTTPS)
         samesite="lax",          # Protects against CSRF while allowing top-level redirects
         max_age=_COOKIE_MAX_AGE,
         path="/api/auth",        # Scope cookie to auth endpoints only
@@ -69,10 +69,12 @@ def _clear_refresh_cookie(response: Response) -> None:
 # ---------------------------------------------------------------------------
 
 @auth_router.post("/register", response_model=models.TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(body: models.UserRegister, response: Response, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, body: models.UserRegister, response: Response, db: Session = Depends(get_db)):
     """
     Create a new account with email and password.
     Returns an access token and sets the refresh cookie.
+    Rate limited to 5 registrations per minute per IP.
     """
     validate_password_strength(body.password)
     user = create_user_with_password(db, body.email, body.password)
@@ -83,10 +85,12 @@ def register(body: models.UserRegister, response: Response, db: Session = Depend
 
 
 @auth_router.post("/login", response_model=models.TokenResponse)
-def login(body: models.UserLogin, response: Response, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, body: models.UserLogin, response: Response, db: Session = Depends(get_db)):
     """
     Login with email and password.
     Returns an access token and sets the refresh cookie.
+    Rate limited to 10 attempts per minute per IP.
     """
     user = authenticate_user(db, body.email, body.password)
     access_token = create_access_token(user.id)
@@ -102,10 +106,12 @@ def logout(response: Response):
 
 
 @auth_router.post("/refresh", response_model=models.TokenResponse)
-def refresh(response: Response, user: models.User = Depends(get_current_user_from_refresh_cookie), db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def refresh(request: Request, response: Response, user: models.User = Depends(get_current_user_from_refresh_cookie), db: Session = Depends(get_db)):
     """
     Issue a new access token using the httpOnly refresh cookie.
     Also rotates the refresh token (refresh token rotation).
+    Rate limited to 30 per minute per IP.
     """
     new_access_token = create_access_token(user.id)
     new_refresh_token = create_refresh_token(user.id)
@@ -162,7 +168,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
     error = request.query_params.get("error")
 
-    frontend_origin = settings.ALLOWED_ORIGINS[0]  # e.g. http://localhost:5173
+    frontend_origin = settings.FRONTEND_URL
 
     if error or not code:
         logger.warning(f"Google OAuth error: {error}")
