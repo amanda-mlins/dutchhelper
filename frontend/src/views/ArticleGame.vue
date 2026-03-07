@@ -136,7 +136,7 @@
                     :class="{ correct: feedback.is_correct, wrong: !feedback.is_correct }">
                     <p class="feedback-text">{{ feedback.is_correct ? '✓ Correct!' : '✗ Wrong!' }}</p>
                     <p class="feedback-answer">Correct: <strong>{{ feedback.correct_article }} {{ currentWord.word
-                    }}</strong></p>
+                            }}</strong></p>
                 </div>
             </div>
 
@@ -199,6 +199,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { authAxios, useAuthStore } from '../stores/auth.js'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 import ArticleGameRules from '../components/ArticleGameRules.vue'
 
 const auth = useAuthStore()
@@ -259,7 +260,7 @@ async function startGame(wordCount) {
             res = await authAxios.post('/api/game/words', payload)
         } else {
             // guest — plain fetch, no auth header
-            const r = await fetch('/api/game/words', {
+            const r = await fetch(`${API}/api/game/words`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -285,7 +286,7 @@ async function submitAnswer(answer) {
     answering.value = true
 
     try {
-        const r = await fetch('/api/game/submit', {
+        const r = await fetch(`${API}/api/game/submit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ word: currentWord.value.word, user_answer: answer }),
