@@ -195,3 +195,18 @@ class ArticleWordMistake(Base):
     last_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="word_mistakes")
+
+
+class VerbConjugation(Base):
+    """Cached verb conjugation data fetched from the LLM."""
+    __tablename__ = "verb_conjugations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    infinitive = Column(String, unique=True, nullable=False, index=True)
+    english_translation = Column(String, nullable=True)
+    verb_type = Column(String, nullable=True)
+    conjugation_data = Column(Text, nullable=False)  # JSON blob
+    query_count = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))

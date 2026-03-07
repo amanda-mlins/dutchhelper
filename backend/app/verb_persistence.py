@@ -1,12 +1,15 @@
 """
-Verb conjugation persistence layer for cost-effective database storage.
+Verb conjugation persistence layer.
 
-This module provides two implementations:
-1. SQLitePersistence - Lightweight, zero-cost database (SQLite)
-2. JSONPersistence - Simple JSON file storage (fallback)
+Implementations:
+1. PostgresPersistence  – Uses the app's SQLAlchemy session / PostgreSQL (production default)
+2. SQLitePersistence    – Standalone SQLite file (local dev fallback)
+3. JSONPersistence      – Plain JSON file (last-resort fallback)
 
-Both automatically save new verb conjugations when queried and add them to the
-growing database, reducing LLM costs over time.
+Selection logic (get_persistence):
+  - DATABASE_URL starts with "postgresql" → PostgresPersistence
+  - USE_JSON_PERSISTENCE=true             → JSONPersistence
+  - otherwise                             → SQLitePersistence
 """
 
 import json
@@ -15,72 +18,132 @@ import sqlite3
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 
 class VerbPersistenceBase(ABC):
-    """Abstract base class for verb persistence implementations"""
-    
     @abstractmethod
+    def get_verb(self, verb: str) -> Optional[Dict[str, Any]]: pass
+    @abstractmethod
+    def save_verb(self, verb: str, conjugation: Dict[str, Any]) -> bool: pass
+    @abstractmethod
+    def verb_exists(self, verb: str) -> bool: pass
+    @abstractmethod
+    def get_all_verbs(self) -> Dict[str, Dict[str, Any]]: pass
+    @abstractmethod
+    def close(self): pass
+
+
+class PostgresPersistence(VerbPersistenceBase):
+    """PostgreSQL-backed verb persistence using the app's SQLAlchemy engine."""
+
+    def _session(self):
+        from app.database import SessionLocal
+        return SessionLocal()
+
     def get_verb(self, verb: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a verb conjugation from storage"""
-        pass
-    
-    @abstractmethod
+        from app.models import VerbConjugation
+        db = self._session()
+        try:
+            row = db.query(VerbConjugation).filter(
+                VerbConjugation.infinitive == verb.strip().lower()
+            ).first()
+            if row:
+                row.query_count += 1
+                row.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                return json.loads(row.conjugation_data)
+            return None
+        except Exception as e:
+            logger.error(f"[PG] Error retrieving verb '{verb}': {e}")
+            db.rollback()
+            return None
+        finally:
+            db.close()
+
     def save_verb(self, verb: str, conjugation: Dict[str, Any]) -> bool:
-        """Save a verb conjugation to storage"""
-        pass
-    
-    @abstractmethod
+        from app.models import VerbConjugation
+        db = self._session()
+        try:
+            infinitive = verb.strip().lower()
+            row = db.query(VerbConjugation).filter(
+                VerbConjugation.infinitive == infinitive
+            ).first()
+            if row:
+                row.conjugation_data = json.dumps(conjugation)
+                row.english_translation = conjugation.get('englishTranslation', '')
+                row.verb_type = conjugation.get('verbType', 'regular')
+                row.updated_at = datetime.now(timezone.utc)
+            else:
+                row = VerbConjugation(
+                    infinitive=infinitive,
+                    english_translation=conjugation.get('englishTranslation', ''),
+                    verb_type=conjugation.get('verbType', 'regular'),
+                    conjugation_data=json.dumps(conjugation),
+                )
+                db.add(row)
+            db.commit()
+            logger.info(f"[PG] Saved verb '{verb}'")
+            return True
+        except Exception as e:
+            logger.error(f"[PG] Error saving verb '{verb}': {e}")
+            db.rollback()
+            return False
+        finally:
+            db.close()
+
     def verb_exists(self, verb: str) -> bool:
-        """Check if a verb exists in storage"""
-        pass
-    
-    @abstractmethod
+        from app.models import VerbConjugation
+        db = self._session()
+        try:
+            return db.query(VerbConjugation.id).filter(
+                VerbConjugation.infinitive == verb.strip().lower()
+            ).first() is not None
+        except Exception as e:
+            logger.error(f"[PG] Error checking verb existence: {e}")
+            return False
+        finally:
+            db.close()
+
     def get_all_verbs(self) -> Dict[str, Dict[str, Any]]:
-        """Get all verbs from storage"""
-        pass
-    
-    @abstractmethod
+        from app.models import VerbConjugation
+        db = self._session()
+        try:
+            rows = db.query(VerbConjugation).order_by(
+                VerbConjugation.query_count.desc()
+            ).all()
+            return {r.infinitive: json.loads(r.conjugation_data) for r in rows}
+        except Exception as e:
+            logger.error(f"[PG] Error retrieving all verbs: {e}")
+            return {}
+        finally:
+            db.close()
+
     def close(self):
-        """Close any open connections or resources"""
-        pass
+        pass  # Sessions are closed per-operation
 
 
 class SQLitePersistence(VerbPersistenceBase):
-    """
-    SQLite-based verb persistence.
-    
-    Benefits:
-    - Zero hosting/database costs
-    - Can be stored in version control (git)
-    - Efficient for thousands of verbs
-    - Supports full-text search
-    - Can be deployed directly with the application
-    """
-    
-    def __init__(self, db_path: str = "/Users/alins/dutchhelper/backend/verbs.db"):
-        """
-        Initialize SQLite persistence.
-        
-        Args:
-            db_path: Path to the SQLite database file
-        """
+    """SQLite-based verb persistence (local development only)."""
+
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            import os
+            db_path = os.environ.get(
+                'VERBS_DB_PATH',
+                str(Path(__file__).parent.parent / 'verbs.db')
+            )
         self.db_path = db_path
         self.connection: Optional[sqlite3.Connection] = None
         self._initialize_db()
-    
+
     def _initialize_db(self):
-        """Create database schema if it doesn't exist"""
         try:
             self.connection = sqlite3.connect(self.db_path)
             self.connection.row_factory = sqlite3.Row
-            
             cursor = self.connection.cursor()
-            
-            # Create verbs table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS verbs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,73 +156,39 @@ class SQLitePersistence(VerbPersistenceBase):
                     query_count INTEGER DEFAULT 1
                 )
             """)
-            
-            # Create index for fast lookups
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_infinitive 
-                ON verbs(infinitive)
-            """)
-            
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_infinitive ON verbs(infinitive)"
+            )
             self.connection.commit()
-            logger.info(f"SQLite database initialized at {self.db_path}")
+            logger.info(f"[SQLite] Database initialised at {self.db_path}")
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite database: {e}")
+            logger.error(f"[SQLite] Failed to initialise database: {e}")
             raise
-    
+
     def get_verb(self, verb: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve a verb conjugation from the database.
-        
-        Args:
-            verb: The infinitive form of the verb (case-insensitive)
-            
-        Returns:
-            Dictionary with conjugation data or None if not found
-        """
         try:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT conjugation_data, query_count FROM verbs WHERE LOWER(infinitive) = LOWER(?)",
+                "SELECT conjugation_data FROM verbs WHERE LOWER(infinitive) = LOWER(?)",
                 (verb.strip(),)
             )
             row = cursor.fetchone()
-            
             if row:
-                # Increment query count for analytics
                 cursor.execute(
-                    "UPDATE verbs SET query_count = query_count + 1, updated_at = CURRENT_TIMESTAMP WHERE LOWER(infinitive) = LOWER(?)",
+                    "UPDATE verbs SET query_count = query_count + 1, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE LOWER(infinitive) = LOWER(?)",
                     (verb.strip(),)
                 )
                 self.connection.commit()
-                
                 return json.loads(row['conjugation_data'])
             return None
         except Exception as e:
-            logger.error(f"Error retrieving verb '{verb}' from SQLite: {e}")
+            logger.error(f"[SQLite] Error retrieving verb '{verb}': {e}")
             return None
-    
+
     def save_verb(self, verb: str, conjugation: Dict[str, Any]) -> bool:
-        """
-        Save a verb conjugation to the database.
-        
-        If the verb already exists, it will be updated.
-        
-        Args:
-            verb: The infinitive form of the verb
-            conjugation: Dictionary with conjugation data
-            
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             cursor = self.connection.cursor()
-            
-            # Extract metadata if available
-            english_translation = conjugation.get('englishTranslation', '')
-            verb_type = conjugation.get('verbType', 'regular')
-            conjugation_json = json.dumps(conjugation)
-            
-            # Upsert (update if exists, insert if not)
             cursor.execute("""
                 INSERT INTO verbs (infinitive, english_translation, verb_type, conjugation_data)
                 VALUES (?, ?, ?, ?)
@@ -168,17 +197,16 @@ class SQLitePersistence(VerbPersistenceBase):
                     english_translation = excluded.english_translation,
                     verb_type = excluded.verb_type,
                     updated_at = CURRENT_TIMESTAMP
-            """, (verb.strip().lower(), english_translation, verb_type, conjugation_json))
-            
+            """, (verb.strip().lower(), conjugation.get('englishTranslation', ''),
+                  conjugation.get('verbType', 'regular'), json.dumps(conjugation)))
             self.connection.commit()
-            logger.info(f"Saved verb '{verb}' to SQLite database")
+            logger.info(f"[SQLite] Saved verb '{verb}'")
             return True
         except Exception as e:
-            logger.error(f"Error saving verb '{verb}' to SQLite: {e}")
+            logger.error(f"[SQLite] Error saving verb '{verb}': {e}")
             return False
-    
+
     def verb_exists(self, verb: str) -> bool:
-        """Check if a verb exists in the database"""
         try:
             cursor = self.connection.cursor()
             cursor.execute(
@@ -187,186 +215,114 @@ class SQLitePersistence(VerbPersistenceBase):
             )
             return cursor.fetchone() is not None
         except Exception as e:
-            logger.error(f"Error checking verb existence: {e}")
+            logger.error(f"[SQLite] Error checking verb existence: {e}")
             return False
-    
+
     def get_all_verbs(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get all verbs from the database.
-        
-        Returns:
-            Dictionary mapping verb infinitives to their conjugation data
-        """
         try:
             cursor = self.connection.cursor()
-            cursor.execute("SELECT infinitive, conjugation_data FROM verbs ORDER BY query_count DESC")
-            
-            verbs = {}
-            for row in cursor.fetchall():
-                verbs[row['infinitive']] = json.loads(row['conjugation_data'])
-            
-            return verbs
+            cursor.execute(
+                "SELECT infinitive, conjugation_data FROM verbs ORDER BY query_count DESC"
+            )
+            return {row['infinitive']: json.loads(row['conjugation_data'])
+                    for row in cursor.fetchall()}
         except Exception as e:
-            logger.error(f"Error retrieving all verbs: {e}")
+            logger.error(f"[SQLite] Error retrieving all verbs: {e}")
             return {}
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get database statistics for monitoring"""
-        try:
-            cursor = self.connection.cursor()
-            
-            cursor.execute("SELECT COUNT(*) as count FROM verbs")
-            total_verbs = cursor.fetchone()['count']
-            
-            cursor.execute("SELECT SUM(query_count) as total FROM verbs")
-            total_queries = cursor.fetchone()['total'] or 0
-            
-            cursor.execute("""
-                SELECT verb_type, COUNT(*) as count 
-                FROM verbs 
-                GROUP BY verb_type
-            """)
-            by_type = {row['verb_type']: row['count'] for row in cursor.fetchall()}
-            
-            return {
-                'total_verbs': total_verbs,
-                'total_queries': total_queries,
-                'by_type': by_type,
-                'database_size_mb': Path(self.db_path).stat().st_size / (1024 * 1024)
-            }
-        except Exception as e:
-            logger.error(f"Error getting statistics: {e}")
-            return {}
-    
+
     def close(self):
-        """Close the database connection"""
         if self.connection:
             self.connection.close()
-            logger.info("SQLite connection closed")
 
 
 class JSONPersistence(VerbPersistenceBase):
-    """
-    JSON file-based verb persistence (lighter alternative to SQLite).
-    
-    Benefits:
-    - No external dependencies (SQLite is built-in, but this uses just JSON)
-    - Can be stored in version control
-    - Human-readable format
-    
-    Note: Not recommended for >10k verbs due to performance
-    """
-    
-    def __init__(self, json_path: str = "/Users/alins/dutchhelper/backend/verbs.json"):
-        """
-        Initialize JSON file persistence.
-        
-        Args:
-            json_path: Path to the JSON file
-        """
+    """Plain JSON file persistence (last-resort fallback)."""
+
+    def __init__(self, json_path: str = None):
+        if json_path is None:
+            import os
+            json_path = os.environ.get(
+                'VERBS_JSON_PATH',
+                str(Path(__file__).parent.parent / 'verbs.json')
+            )
         self.json_path = json_path
         self.verbs: Dict[str, Dict[str, Any]] = {}
         self._load_from_file()
-    
+
     def _load_from_file(self):
-        """Load verbs from JSON file if it exists"""
         try:
             path = Path(self.json_path)
             if path.exists():
                 with open(path, 'r', encoding='utf-8') as f:
                     self.verbs = json.load(f)
-                logger.info(f"Loaded {len(self.verbs)} verbs from {self.json_path}")
-            else:
-                logger.info(f"JSON file not found, starting with empty database")
+                logger.info(f"[JSON] Loaded {len(self.verbs)} verbs")
         except Exception as e:
-            logger.error(f"Error loading JSON file: {e}")
+            logger.error(f"[JSON] Error loading file: {e}")
             self.verbs = {}
-    
+
     def _save_to_file(self):
-        """Save verbs to JSON file"""
         try:
             path = Path(self.json_path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(self.verbs, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"Error saving to JSON file: {e}")
-    
+            logger.error(f"[JSON] Error saving file: {e}")
+
     def get_verb(self, verb: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a verb conjugation from the JSON storage"""
-        verb_lower = verb.strip().lower()
-        return self.verbs.get(verb_lower)
-    
+        return self.verbs.get(verb.strip().lower())
+
     def save_verb(self, verb: str, conjugation: Dict[str, Any]) -> bool:
-        """Save a verb conjugation to the JSON storage"""
         try:
-            verb_lower = verb.strip().lower()
-            self.verbs[verb_lower] = conjugation
+            self.verbs[verb.strip().lower()] = conjugation
             self._save_to_file()
-            logger.info(f"Saved verb '{verb}' to JSON database")
             return True
         except Exception as e:
-            logger.error(f"Error saving verb '{verb}' to JSON: {e}")
+            logger.error(f"[JSON] Error saving verb '{verb}': {e}")
             return False
-    
+
     def verb_exists(self, verb: str) -> bool:
-        """Check if a verb exists in the JSON storage"""
         return verb.strip().lower() in self.verbs
-    
+
     def get_all_verbs(self) -> Dict[str, Dict[str, Any]]:
-        """Get all verbs from the JSON storage"""
         return self.verbs.copy()
-    
+
     def close(self):
-        """Close resources (JSON doesn't need cleanup, but keep for interface compliance)"""
         pass
 
 
-# Global persistence instance (singleton pattern)
+# ── Singleton factory ─────────────────────────────────────────────────────────
+
 _persistence_instance: Optional[VerbPersistenceBase] = None
 
 
 def get_persistence() -> VerbPersistenceBase:
     """
-    Get the global persistence instance.
-    
-    Uses SQLite by default for better performance and features.
-    To use JSON instead, set environment variable: USE_JSON_PERSISTENCE=true
-    
-    Returns:
-        A VerbPersistenceBase implementation (SQLite or JSON)
+    Return the global persistence singleton.
+
+    Selection order:
+    1. DATABASE_URL starts with "postgresql" → PostgresPersistence  (production)
+    2. USE_JSON_PERSISTENCE=true             → JSONPersistence
+    3. otherwise                             → SQLitePersistence    (local dev)
     """
     global _persistence_instance
-    
     if _persistence_instance is None:
         import os
-        
-        if os.getenv('USE_JSON_PERSISTENCE', 'false').lower() == 'true':
-            logger.info("Using JSON persistence for verbs")
+        db_url = os.environ.get('DATABASE_URL', '')
+        if db_url.startswith('postgresql'):
+            logger.info("[Persistence] Using PostgreSQL for verb conjugations")
+            _persistence_instance = PostgresPersistence()
+        elif os.getenv('USE_JSON_PERSISTENCE', 'false').lower() == 'true':
+            logger.info("[Persistence] Using JSON for verb conjugations")
             _persistence_instance = JSONPersistence()
         else:
-            logger.info("Using SQLite persistence for verbs")
+            logger.info("[Persistence] Using SQLite for verb conjugations")
             _persistence_instance = SQLitePersistence()
-    
     return _persistence_instance
 
 
 def initialize_persistence(use_json: bool = False) -> VerbPersistenceBase:
-    """
-    Initialize the persistence layer.
-    
-    Args:
-        use_json: If True, use JSON persistence. Otherwise use SQLite.
-        
-    Returns:
-        The initialized persistence instance
-    """
+    """Force-initialise the persistence layer (used in tests)."""
     global _persistence_instance
-    
-    if use_json:
-        _persistence_instance = JSONPersistence()
-    else:
-        _persistence_instance = SQLitePersistence()
-    
+    _persistence_instance = JSONPersistence() if use_json else SQLitePersistence()
     return _persistence_instance
