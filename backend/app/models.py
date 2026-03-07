@@ -4,7 +4,7 @@ from typing import Optional, List, Any
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 class Message(BaseModel):
@@ -53,7 +53,8 @@ class User(Base):
     google_id = Column(String, unique=True, index=True, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     words = relationship("UserWord", back_populates="owner")
     game_sessions = relationship("ArticleGameSession", back_populates="user")
@@ -69,7 +70,7 @@ class UserWord(Base):
     # Storing dictionary-like data as a JSON string
     details = Column(Text) # JSON string: {definition: "", translation_en: "", example: ""}
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     last_practiced_at = Column(DateTime)
     practice_count = Column(Integer, default=0)
     
@@ -159,7 +160,7 @@ class ArticleGameSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    played_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    played_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     word_count = Column(Integer, nullable=False)
     score = Column(Integer, nullable=False)
     accuracy = Column(Integer, nullable=False)  # 0-100 integer percent
@@ -191,6 +192,6 @@ class ArticleWordMistake(Base):
     word = Column(String, nullable=False)
     times_seen = Column(Integer, default=0, nullable=False)
     times_wrong = Column(Integer, default=0, nullable=False)
-    last_seen_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="word_mistakes")

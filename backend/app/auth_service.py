@@ -168,6 +168,20 @@ def get_current_user_optional(
         return None
     return user
 
+def get_admin_user(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """
+    Dependency: like get_current_user but also requires is_admin=True.
+    Raises 403 Forbidden for non-admin authenticated users.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user
+
 def get_current_user_from_refresh_cookie(request: Request, db: Session = Depends(get_db)) -> models.User:
     """
     Dependency: reads the refresh token from the httpOnly cookie,

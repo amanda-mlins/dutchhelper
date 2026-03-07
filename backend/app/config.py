@@ -58,6 +58,22 @@ class Settings(BaseSettings):
         description="Google OAuth redirect URI registered in Google Cloud Console"
     )
 
+    # Frontend URL — used for OAuth redirects. Must be explicit in production.
+    FRONTEND_URL: str = Field(
+        default="http://localhost:5173",
+        description="Full origin of the frontend app (no trailing slash). Used for OAuth redirects."
+    )
+
+    # Database
+    DATABASE_URL: str = Field(
+        default="sqlite:///./wordbank.db",
+        description=(
+            "SQLAlchemy database URL. "
+            "Use sqlite:///./wordbank.db for development. "
+            "Use postgresql+psycopg2://user:pass@host/db for production."
+        )
+    )
+
     # Validation
     @field_validator('LOG_LEVEL')
     @classmethod
@@ -67,6 +83,22 @@ class Settings(BaseSettings):
         if v.upper() not in valid_levels:
             raise ValueError(f"LOG_LEVEL must be one of {valid_levels}, got {v}")
         return v.upper()
+
+    @field_validator('JWT_SECRET_KEY')
+    @classmethod
+    def validate_jwt_secret(cls, v: str) -> str:
+        """Reject the placeholder default so the app never starts with an insecure key."""
+        if "CHANGE_ME" in v:
+            raise ValueError(
+                "JWT_SECRET_KEY is still set to the default placeholder. "
+                "Generate a real secret with: openssl rand -hex 32"
+            )
+        if len(v) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY must be at least 32 characters. "
+                "Generate one with: openssl rand -hex 32"
+            )
+        return v
     
     @field_validator('OPENROUTER_API_KEY', mode='after')
     @classmethod

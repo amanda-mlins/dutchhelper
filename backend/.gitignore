@@ -15,3 +15,7 @@ pip-selfcheck.json
 __pycache__/
 
 *.db
+
+# Environment secrets — never commit
+.env
+
