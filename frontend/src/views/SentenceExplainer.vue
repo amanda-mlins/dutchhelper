@@ -143,7 +143,7 @@
 import axios from 'axios'
 import { prepareSentences } from '@/utils/sentenceUtils'
 
-const API_BASE_URL = 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default {
   name: 'SentenceExplainer',
@@ -391,7 +391,7 @@ export default {
         if (err.response?.data?.detail) {
           this.error = `Failed to analyze text: ${err.response.data.detail}`
         } else if (err.message === 'Network Error') {
-          this.error = 'Backend is not running. Make sure the server is started on http://localhost:8000'
+          this.error = 'Could not connect to the backend. Please try again later.'
         } else {
           this.error = `Failed to analyze text: ${err.message}`
         }
