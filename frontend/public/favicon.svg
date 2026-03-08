@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Dutch flag: red, white, blue horizontal stripes -->
+  <rect width="32" height="10.67" fill="#AE1C28"/>
+  <rect y="10.67" width="32" height="10.67" fill="#FFFFFF"/>
+  <rect y="21.33" width="32" height="10.67" fill="#21468B"/>
+</svg>
