@@ -225,4 +225,11 @@ async function handleLogin() {
     font-weight: 600;
     text-decoration: none;
 }
+
+@media (max-width: 480px) {
+    .auth-card {
+        padding: 28px 20px;
+        border-radius: 12px;
+    }
+}
 </style>

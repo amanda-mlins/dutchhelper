@@ -93,40 +93,40 @@ const auth = useAuthStore()
 }
 
 .header h1 {
-  font-size: 48px;
+  font-size: clamp(28px, 7vw, 48px);
   margin-bottom: 10px;
 }
 
 .header p {
-  font-size: 18px;
+  font-size: clamp(15px, 4vw, 18px);
   opacity: 0.9;
 }
 
 .main {
   max-width: 900px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 24px 16px;
 }
 
 .section {
   background: white;
   border-radius: 8px;
-  padding: 30px;
-  margin-bottom: 20px;
+  padding: 24px;
+  margin-bottom: 16px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .section h2 {
   color: #667eea;
-  margin-bottom: 20px;
-  font-size: 24px;
+  margin-bottom: 16px;
+  font-size: clamp(18px, 5vw, 24px);
 }
 
 /* Sign-in nudge banner */
 .nudge {
   background: #fffbeb;
   border: 1.5px solid #f6e05e;
-  padding: 16px 24px;
+  padding: 14px 18px;
 }
 
 .nudge p {
@@ -147,15 +147,15 @@ const auth = useAuthStore()
 
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .tool-card {
   display: block;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 30px;
+  padding: 24px 20px;
   border-radius: 8px;
   text-decoration: none;
   transition: transform 0.3s, box-shadow 0.3s;
@@ -163,7 +163,7 @@ const auth = useAuthStore()
 }
 
 .tool-card:hover:not(.tool-card--locked) {
-  transform: translateY(-5px);
+  transform: translateY(-4px);
   box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
 }
 
@@ -182,7 +182,7 @@ const auth = useAuthStore()
 }
 
 .card-header h3 {
-  font-size: 20px;
+  font-size: clamp(16px, 4vw, 20px);
   margin-bottom: 0;
 }
 
@@ -200,12 +200,27 @@ const auth = useAuthStore()
 }
 
 .tool-card h3 {
-  font-size: 20px;
+  font-size: clamp(16px, 4vw, 20px);
   margin-bottom: 10px;
 }
 
 .tool-card p {
   font-size: 14px;
   opacity: 0.9;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section {
+    padding: 18px 16px;
+  }
+
+  .header {
+    padding: 28px 16px;
+  }
 }
 </style>
