@@ -403,13 +403,17 @@ async def add_user_word(
     current_user: models.User = Depends(get_current_user),
 ):
     """Adds a new word to the authenticated user's word bank."""
+    from app.exceptions import ProcessingError
     service = WordListService(db)
     try:
         new_word = await service.add_word(word=word_data.word, user_id=current_user.id)
         return new_word
+    except ProcessingError as e:
+        # Invalid word — surface the LLM's explanation to the frontend
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Error adding word '{word_data.word}': {e}")
-        raise HTTPException(status_code=500, detail="Failed to add word.")
+        raise HTTPException(status_code=500, detail="Failed to add word. Please try again.")
 
 @router.get("/word-bank/words", response_model=List[models.UserWordSchema])
 def get_user_words(

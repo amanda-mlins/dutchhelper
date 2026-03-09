@@ -579,57 +579,70 @@ Ensure the JSON is properly formatted and valid."""
     @staticmethod
     async def get_word_details(word: str) -> dict:
         """
-        Uses an LLM to get a comprehensive analysis of a Dutch word, including its type.
+        Uses the LLM to get a comprehensive analysis of a Dutch word.
+
+        Returns a dict with keys:
+            valid (bool), word_type, definition, translation_en, example, reason (when invalid).
+
+        Raises ProcessingError with a user-friendly message if the word is not a
+        recognised Dutch word — callers must NOT persist the result in that case.
         """
         client = OpenRouterService.get_client()
-        prompt = f"""
-        Analyze the Dutch word "{word}".
-        Provide a response in JSON format with the following keys:
-        - "word_type": The grammatical type of the word (e.g., "noun", "verb", "adjective").
-        - "definition": A concise definition of the word in English.
-        - "translation_en": The most common English translation.
-        - "example": A simple Dutch sentence using the word, with an English translation.
-        All fields are required. If word can have multiple types, provide the most common one in context. If the word is not recognized, return "unknown" for word_type and appropriate error messages for other fields.
-        Return ONLY the JSON object - no additional text, explanations, or commentary.
-        Make sure the JSON is properly formatted and valid.
-        If it is a verb, store the infinitive form and add the requested form in the examples field, for example if the word is "loopt", the infinitive is "lopen" and the example should use "loopt" in a sentence.
-        Example for the word "fiets":
-        {{
-            "word_type": "noun",
-            "definition": "A human-powered vehicle with two wheels.",
-            "translation_en": "bicycle",
-            "example": "Ik ga met de fiets naar het werk. (I go to work by bicycle.)"
-        }}
-        """
-        
+        prompt = f"""You are a Dutch dictionary assistant. Analyse the input "{word}" and return ONLY a JSON object with these exact keys:
+
+- "valid": true if the input is a recognised Dutch word (noun, verb, adjective, adverb, etc.), false otherwise.
+- "word_type": The primary grammatical type — "noun", "verb", "adjective", "adverb", "preposition", "conjunction", "pronoun", or "unknown". Set to null when valid is false.
+- "definition": A concise English definition. Set to null when valid is false.
+- "translation_en": The most common English translation. Set to null when valid is false.
+- "example": A simple Dutch sentence using the word with an English translation in brackets. Set to null when valid is false.
+- "reason": Only when valid is false — a short explanation of why (e.g. "not a Dutch word", "gibberish", "proper name"). Omit or set to null when valid is true.
+
+Rules:
+- Set "valid" to false for: gibberish, non-Dutch foreign words, numbers, symbols, or strings that are clearly not Dutch.
+- Set "valid" to true for any real Dutch word regardless of type.
+- If it is a verb, store the infinitive form as the word and use the conjugated form in the example if the input was conjugated (e.g. input "loopt" → word_type "verb", example uses "loopt").
+- Return ONLY the raw JSON object — no markdown fences, no extra text.
+
+Example for "fiets" (valid noun):
+{{"valid":true,"word_type":"noun","definition":"A human-powered two-wheeled vehicle.","translation_en":"bicycle","example":"Ik ga met de fiets naar het werk. (I go to work by bicycle.)","reason":null}}
+
+Example for "xqzw" (gibberish):
+{{"valid":false,"word_type":null,"definition":null,"translation_en":null,"example":null,"reason":"'xqzw' is not a recognised Dutch word."}}
+"""
+        content = ""
         try:
             response = await client.post(
                 "/chat/completions",
                 json={
                     "model": settings.LLM_MODEL,
                     "messages": [
-                        {"role": "system", "content": "You are a helpful assistant that provides dictionary-style information about Dutch words in JSON format."},
-                        {"role": "user", "content": prompt}
+                        {"role": "system", "content": "You are a precise Dutch dictionary assistant. Always return valid JSON only."},
+                        {"role": "user", "content": prompt},
                     ],
-                    "temperature": 0.3,
-                    "max_tokens": 2000,
-                    # "response_format": {"type": "json_object"}
-                }
+                    "temperature": 0.1,
+                    "max_tokens": 400,
+                },
             )
-            logger.info(response)
-            # response.raise_for_status()
-            
-            content = response.json()['choices'][0]['message']['content']
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            # Strip markdown fences if the model wraps the response
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
             details = json.loads(content)
+
+            # Primary validity gate — raise before the caller can persist anything
+            if not details.get("valid", True):
+                reason = details.get("reason") or f"'{word}' is not a recognised Dutch word."
+                raise ProcessingError(reason)
+
             return details
+
+        except ProcessingError:
+            raise
         except Exception as e:
-            logger.error(f"Error fetching details from LLM for '{word}': {e}")
-            return {
-                "word_type": "unknown",
-                "definition": "Error fetching definition.",
-                "translation_en": "Error fetching translation.",
-                "example": "Error fetching example."
-            }
+            logger.error(f"Error fetching details from LLM for '{word}': {e}, content: {content!r}")
+            raise ProcessingError(f"Could not analyse '{word}': {e}")
 
     @staticmethod
     async def get_article_word_details(word: str) -> dict:

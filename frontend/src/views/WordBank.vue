@@ -5,14 +5,20 @@
             <p>Your personal collection of Dutch words.</p>
         </header>
         <div class="add-word-section">
-            <div v-if="addError" class="error-message">
-                <p>{{ addError }}</p>
-            </div>
             <div class="add-word-form">
-                <input v-model="newWord" type="text" placeholder="Enter a new word" class="add-word-input" />
-                <button @click="addWord" class="add-word-btn" :disabled="isAdding">
-                    <i class="fas fa-plus"></i> Add Word
+                <input v-model="newWord" type="text" placeholder="Enter a Dutch word…" class="add-word-input"
+                    @keyup.enter="addWord" :disabled="isAdding" />
+                <button @click="addWord" class="add-word-btn" :disabled="isAdding || !newWord.trim()">
+                    <span v-if="isAdding" class="spinner">⟳</span>
+                    <i v-else class="fas fa-plus"></i>
+                    {{ isAdding ? 'Looking up…' : 'Add Word' }}
                 </button>
+            </div>
+            <div v-if="addError" class="add-feedback add-feedback--error">
+                <span class="feedback-icon">⚠️</span> {{ addError }}
+            </div>
+            <div v-if="addSuccess" class="add-feedback add-feedback--success">
+                <span class="feedback-icon">✅</span> <strong>{{ addSuccess }}</strong> added to your word bank!
             </div>
         </div>
         <div v-if="isLoading" class="loading-indicator">
@@ -51,6 +57,7 @@ export default {
             newWord: '',
             isAdding: false,
             addError: null,
+            addSuccess: null,
             isLoading: false,
             error: null,
             isEditModalOpen: false,
@@ -75,12 +82,24 @@ export default {
             if (!this.newWord.trim()) return;
             this.isAdding = true;
             this.addError = null;
+            this.addSuccess = null;
+            const word = this.newWord.trim();
             try {
-                await authAxios.post('/api/word-bank/words', { word: this.newWord });
+                await authAxios.post('/api/word-bank/words', { word });
                 this.newWord = '';
+                this.addSuccess = word;
                 await this.fetchWords();
             } catch (err) {
-                this.addError = 'Failed to add word. It might already be in your list.';
+                const status = err.response?.status;
+                const detail = err.response?.data?.detail;
+                if (status === 422 && detail) {
+                    // LLM validation rejection — show the explanation directly
+                    this.addError = detail;
+                } else if (status === 409) {
+                    this.addError = `'${word}' is already in your word bank.`;
+                } else {
+                    this.addError = detail || 'Failed to add word. Please try again.';
+                }
                 console.error(err);
             } finally {
                 this.isAdding = false;
@@ -179,15 +198,57 @@ export default {
     cursor: not-allowed;
 }
 
-.words-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
+.add-feedback {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin-top: 10px;
+}
+
+.add-feedback--error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.add-feedback--success {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.feedback-icon {
+    flex-shrink: 0;
+}
+
+.spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .error-message {
     color: #e74c3c;
     text-align: center;
     margin-top: 10px;
+}
+
+.words-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
 }
 </style>

@@ -11,7 +11,9 @@ class WordListService:
         """
         Adds a new word to the authenticated user's word bank.
         Fetches details from the LLM before saving.
+        Raises ProcessingError if the word is not recognised — nothing is persisted.
         """
+        word = word.strip().lower()
         # Idempotent: return existing word if already saved by this user
         existing = (
             self.db.query(models.UserWord)
@@ -21,7 +23,9 @@ class WordListService:
         if existing:
             return existing
 
-        # Enrich with LLM-generated details
+        # Enrich with LLM-generated details.
+        # get_word_details raises ProcessingError for invalid words — nothing is
+        # added to the session before this call succeeds.
         word_details = await OpenRouterService.get_word_details(word)
         word_type = word_details.get("word_type", "unknown")
 
@@ -35,7 +39,6 @@ class WordListService:
             translation_en=word_details.get("translation_en", ""),
             example=word_details.get("example", ""),
         )
-
         self.db.add(new_word)
         self.db.commit()
         self.db.refresh(new_word)
