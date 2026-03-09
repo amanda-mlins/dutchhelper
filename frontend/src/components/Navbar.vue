@@ -29,10 +29,20 @@
                         @click="closeMenu">
                         Word Bank<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                     </router-link>
-                    <router-link v-if="auth.user?.is_admin" to="/admin/words" class="nav-link nav-admin"
-                        @click="closeMenu">
-                        🛠️ Admin
-                    </router-link>
+                    <!-- Admin dropdown (desktop: click; mobile: inline expand) -->
+                    <div v-if="auth.user?.is_admin" class="admin-dropdown" :class="{ open: adminOpen }" @click.stop>
+                        <button class="nav-link nav-admin admin-toggle" @click="toggleAdmin">
+                            🛠️ Admin <span class="dropdown-arrow">▾</span>
+                        </button>
+                        <div class="admin-menu">
+                            <router-link to="/admin/words" class="admin-menu-item" @click="closeAll">
+                                📝 Article Words
+                            </router-link>
+                            <router-link to="/admin/verbs" class="admin-menu-item" @click="closeAll">
+                                � Verb Cache
+                            </router-link>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="navbar-user">
@@ -51,19 +61,27 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const router = useRouter()
 const menuOpen = ref(false)
+const adminOpen = ref(false)
 
 function toggleMenu() { menuOpen.value = !menuOpen.value }
 function closeMenu() { menuOpen.value = false }
+function toggleAdmin(e) { e.stopPropagation(); adminOpen.value = !adminOpen.value }
+function closeAll() { menuOpen.value = false; adminOpen.value = false }
+
+function onClickOutside() { adminOpen.value = false }
+
+onMounted(() => document.addEventListener('click', onClickOutside))
+onUnmounted(() => document.removeEventListener('click', onClickOutside))
 
 async function handleLogout() {
-    closeMenu()
+    closeAll()
     await auth.logout()
     router.push('/login')
 }
@@ -150,6 +168,66 @@ async function handleLogout() {
 
 .nav-admin:hover {
     background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ── Admin dropdown ───────────────────────────────────────── */
+.admin-dropdown {
+    position: relative;
+}
+
+.admin-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.dropdown-arrow {
+    font-size: 10px;
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+.admin-dropdown.open .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.admin-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    min-width: 170px;
+    overflow: hidden;
+    z-index: 2000;
+}
+
+.admin-dropdown.open .admin-menu {
+    display: block;
+}
+
+.admin-menu-item {
+    display: block;
+    padding: 11px 16px;
+    color: #374151;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+
+.admin-menu-item:hover,
+.admin-menu-item.router-link-active {
+    background: #f3f4f6;
+    color: #7c3aed;
 }
 
 .navbar-user {
@@ -316,6 +394,31 @@ async function handleLogout() {
 
     .btn-register {
         display: block;
+    }
+
+    /* Admin dropdown: expand inline on mobile */
+    .admin-dropdown {
+        position: static;
+    }
+
+    .admin-menu {
+        position: static;
+        box-shadow: none;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        margin-top: 4px;
+    }
+
+    .admin-menu-item {
+        color: rgba(255, 255, 255, 0.9);
+        padding: 10px 20px;
+        font-size: 15px;
+    }
+
+    .admin-menu-item:hover,
+    .admin-menu-item.router-link-active {
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
     }
 }
 </style>

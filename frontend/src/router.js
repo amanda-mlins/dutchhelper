@@ -9,6 +9,7 @@ import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import AuthCallback from './views/AuthCallback.vue'
 import AdminWords from './views/AdminWords.vue'
+import AdminVerbs from './views/AdminVerbs.vue'
 import { useAuthStore } from './stores/auth.js'
 
 const routes = [
@@ -78,6 +79,12 @@ const routes = [
     path: '/admin/words',
     name: 'AdminWords',
     component: AdminWords,
+    meta: { adminOnly: true }
+  },
+  {
+    path: '/admin/verbs',
+    name: 'AdminVerbs',
+    component: AdminVerbs,
     meta: { adminOnly: true }
   }
 ]

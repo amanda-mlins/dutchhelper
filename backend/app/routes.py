@@ -646,3 +646,135 @@ async def admin_bulk_import_words(
         "summary": {"added": added, "skipped": skipped, "errors": errors, "total": len(results)},
         "results": results,
     }
+
+
+# ============================================================================
+# Admin — Verb Conjugations CRUD
+# ============================================================================
+
+@router.get("/admin/verbs", response_model=List[models.VerbConjugationSchema])
+def admin_list_verbs(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Return every cached verb conjugation (admin only)."""
+    return (
+        db.query(models.VerbConjugation)
+        .order_by(models.VerbConjugation.query_count.desc())
+        .all()
+    )
+
+
+@router.delete("/admin/verbs/{verb_id}", status_code=204)
+def admin_delete_verb(
+    verb_id: int,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Delete a cached verb conjugation (admin only)."""
+    row = db.query(models.VerbConjugation).filter_by(id=verb_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Verb not found")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
+
+class VerbLookupRequest(BaseModel):
+    infinitive: str
+
+
+@router.post("/admin/verbs/lookup")
+async def admin_lookup_verb(
+    body: VerbLookupRequest,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """
+    Fetch (or re-fetch) conjugation data for a Dutch verb via LLM and save/update
+    it in the database. Returns the saved VerbConjugation row (admin only).
+    """
+    infinitive = body.infinitive.strip().lower()
+    if not infinitive:
+        raise HTTPException(status_code=400, detail="infinitive cannot be empty")
+    try:
+        conjugation_data = await VerbConjugationService.conjugate_verb_with_llm(infinitive)
+    except Exception as e:
+        logger.error(f"Admin verb lookup failed for '{infinitive}': {e}")
+        raise HTTPException(status_code=500, detail=f"LLM lookup failed: {e}")
+
+    # The service already persists the result; just return the DB row
+    row = db.query(models.VerbConjugation).filter_by(infinitive=infinitive).first()
+    if not row:
+        raise HTTPException(status_code=500, detail="Verb was not persisted after LLM call")
+    db.refresh(row)
+    return models.VerbConjugationSchema.model_validate(row)
+
+
+class VerbBulkImportRequest(BaseModel):
+    infinitives: List[str]
+
+
+@router.post("/admin/verbs/bulk-import")
+async def admin_bulk_import_verbs(
+    body: VerbBulkImportRequest,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """
+    Bulk-import a list of Dutch verb infinitives.
+
+    For each infinitive the LLM is called to generate full conjugation data.
+    Verbs already cached in the database are skipped.
+    Up to 3 LLM calls run concurrently (semaphore-limited to avoid rate limits).
+
+    Returns { summary: {added, skipped, errors, total}, results: [...] }
+    """
+    import asyncio
+
+    clean = list({v.strip().lower() for v in body.infinitives if v.strip()})
+    if not clean:
+        raise HTTPException(status_code=400, detail="No valid infinitives provided")
+    if len(clean) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 verbs per import")
+
+    existing = {
+        row.infinitive
+        for row in db.query(models.VerbConjugation.infinitive)
+        .filter(models.VerbConjugation.infinitive.in_(clean))
+        .all()
+    }
+
+    to_add = [v for v in clean if v not in existing]
+    results = [{"infinitive": v, "status": "skipped", "reason": "already cached"} for v in clean if v in existing]
+
+    semaphore = asyncio.Semaphore(3)
+
+    async def fetch_one(infinitive: str) -> dict:
+        async with semaphore:
+            try:
+                data = await VerbConjugationService.conjugate_verb_with_llm(infinitive)
+                return {
+                    "infinitive": infinitive,
+                    "status": "added",
+                    "english_translation": data.get("englishTranslation"),
+                    "verb_type": data.get("verbType"),
+                }
+            except Exception as e:
+                logger.error(f"Bulk verb import: LLM failed for '{infinitive}': {e}")
+                return {"infinitive": infinitive, "status": "error", "error": str(e)}
+
+    llm_results = await asyncio.gather(*[fetch_one(v) for v in to_add])
+    results.extend(llm_results)
+
+    infinitive_order = {v: i for i, v in enumerate(clean)}
+    results.sort(key=lambda r: infinitive_order.get(r["infinitive"], 999))
+
+    added = sum(1 for r in results if r["status"] == "added")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+    errors = sum(1 for r in results if r["status"] == "error")
+
+    return {
+        "summary": {"added": added, "skipped": skipped, "errors": errors, "total": len(results)},
+        "results": results,
+    }

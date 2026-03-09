@@ -257,3 +257,19 @@ class ArticleWordSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Pydantic Schemas for Verb Conjugation Admin ---
+
+class VerbConjugationSchema(BaseModel):
+    id: int
+    infinitive: str
+    english_translation: Optional[str] = None
+    verb_type: Optional[str] = None
+    conjugation_data: str   # raw JSON string
+    query_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
