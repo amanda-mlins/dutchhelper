@@ -91,6 +91,19 @@
                 </p>
             </div>
 
+            <!-- Difficulty -->
+            <div class="difficulty-section">
+                <p class="mode-label">Difficulty</p>
+                <div class="difficulty-options">
+                    <button v-for="d in DIFFICULTIES" :key="d.value"
+                        :class="['diff-btn', { active: difficulty === d.value }]" @click="difficulty = d.value">
+                        <span class="diff-icon">{{ d.icon }}</span>
+                        <span class="diff-name">{{ d.label }}</span>
+                        <span class="diff-desc">{{ d.desc }}</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Question count -->
             <p class="mode-label">How many questions?</p>
             <div class="count-options">
@@ -116,6 +129,8 @@
             <div class="progress-section">
                 <div class="progress-info">
                     <span>{{ currentIndex + 1 }} / {{ questionCount }}</span>
+                    <span class="diff-badge diff-badge--{{ difficulty }}">{{DIFFICULTIES.find(d => d.value ===
+                        difficulty)?.icon}} {{ difficulty }}</span>
                     <span class="score-inline">✓ {{ correctSoFar }}</span>
                 </div>
                 <div class="progress-bar-wrap">
@@ -144,23 +159,40 @@
                     <p class="sentence-hint">{{ currentQuestion.english_hint }}</p>
                 </div>
 
-                <!-- Multiple-choice options (shown before answered) -->
-                <div v-if="!answered" class="options-grid">
-                    <button v-for="opt in currentOptions" :key="opt" class="option-btn" @click="selectOption(opt)">{{
-                        opt }}</button>
-                </div>
+                <!-- ── EASY: options grid + optional type-in ── -->
+                <template v-if="difficulty === 'easy'">
+                    <div v-if="!answered" class="options-grid">
+                        <button v-for="opt in currentOptions" :key="opt" class="option-btn"
+                            @click="selectOption(opt)">{{ opt }}</button>
+                    </div>
+                    <div v-if="!answered" class="or-separator"><span>or type your answer:</span></div>
+                    <div v-if="!answered" class="type-row">
+                        <input ref="answerInput" v-model="typedAnswer" type="text" class="answer-input"
+                            placeholder="Type conjugated form…" @keyup.enter="submitTyped" />
+                        <button class="btn-submit" @click="submitTyped" :disabled="!typedAnswer.trim()">
+                            Check ✓
+                        </button>
+                    </div>
+                </template>
 
-                <!-- OR free-text input (toggle) -->
-                <div v-if="!answered" class="or-separator">
-                    <span>or type your answer:</span>
-                </div>
-                <div v-if="!answered" class="type-row">
-                    <input ref="answerInput" v-model="typedAnswer" type="text" class="answer-input"
-                        placeholder="Type conjugated form…" @keyup.enter="submitTyped" />
-                    <button class="btn-submit" @click="submitTyped" :disabled="!typedAnswer.trim()">
-                        Check ✓
-                    </button>
-                </div>
+                <!-- ── MEDIUM: options grid only ── -->
+                <template v-else-if="difficulty === 'medium'">
+                    <div v-if="!answered" class="options-grid">
+                        <button v-for="opt in currentOptions" :key="opt" class="option-btn"
+                            @click="selectOption(opt)">{{ opt }}</button>
+                    </div>
+                </template>
+
+                <!-- ── HARD: type-only, no hints ── -->
+                <template v-else-if="difficulty === 'hard'">
+                    <div v-if="!answered" class="type-row type-row-hard">
+                        <input ref="answerInput" v-model="typedAnswer" type="text" class="answer-input"
+                            placeholder="Type the conjugated form…" @keyup.enter="submitTyped" />
+                        <button class="btn-submit" @click="submitTyped" :disabled="!typedAnswer.trim()">
+                            Check ✓
+                        </button>
+                    </div>
+                </template>
 
                 <!-- Feedback (shown after answered) -->
                 <div v-if="answered" class="feedback-card"
@@ -246,17 +278,40 @@ import { authAxios } from '../stores/auth.js';
 
 const ALL_TENSES = ['Present', 'Simple Past', 'Present Perfect', 'Future'];
 
+const DIFFICULTIES = [
+    {
+        value: 'easy',
+        label: 'Easy',
+        icon: '🟢',
+        desc: '4 options + type',
+    },
+    {
+        value: 'medium',
+        label: 'Medium',
+        icon: '🟡',
+        desc: '4 options only',
+    },
+    {
+        value: 'hard',
+        label: 'Hard',
+        icon: '🔴',
+        desc: 'Type only',
+    },
+];
+
 export default {
     name: 'VerbGame',
 
     data() {
         return {
             ALL_TENSES,
+            DIFFICULTIES,
             phase: 'setup',         // 'setup' | 'playing' | 'results'
             // setup
             customVerb: '',
             questionCount: 10,
             selectedTenses: [...ALL_TENSES],  // all tenses selected by default
+            difficulty: 'easy',              // 'easy' | 'medium' | 'hard'
             useWordBank: false,
             wordBankVerbs: null,   // null = not loaded yet / not authenticated
             stats: null,
@@ -800,6 +855,73 @@ export default {
     padding: 6px 12px;
 }
 
+/* Difficulty picker */
+.difficulty-section {
+    margin-bottom: 24px;
+}
+
+.difficulty-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.diff-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px;
+    border-radius: 12px;
+    border: 2px solid #d1d5db;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.diff-btn:hover {
+    border-color: #667eea;
+    background: #f5f3ff;
+}
+
+.diff-btn.active {
+    border-color: #667eea;
+    background: #ede9fe;
+}
+
+.diff-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.diff-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #374151;
+}
+
+.diff-desc {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+/* Difficulty badge in progress bar */
+.diff-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 999px;
+    text-transform: capitalize;
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+/* type-only hard mode: stretch input row slightly */
+.type-row-hard .answer-input {
+    font-size: 18px;
+    text-align: center;
+}
+
 /* ── Playing ────────────────────────────────────────────────────────────── */
 .progress-section {
     margin-bottom: 24px;
@@ -808,6 +930,7 @@ export default {
 .progress-info {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     font-size: 14px;
     color: #555;
     margin-bottom: 6px;
@@ -1314,6 +1437,19 @@ export default {
 
     .type-row {
         flex-direction: column;
+    }
+
+    .difficulty-options {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+
+    .diff-btn {
+        padding: 10px 4px;
+    }
+
+    .diff-desc {
+        display: none;
     }
 }
 </style>
