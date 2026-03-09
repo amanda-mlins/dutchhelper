@@ -547,3 +547,102 @@ async def admin_lookup_article_word(
     except Exception as e:
         logger.error(f"LLM lookup failed for '{word}': {e}")
         raise HTTPException(status_code=500, detail=f"LLM lookup failed: {e}")
+
+
+class BulkImportRequest(BaseModel):
+    words: List[str]
+
+
+@router.post("/admin/article-words/bulk-import")
+async def admin_bulk_import_words(
+    body: BulkImportRequest,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """
+    Bulk-import a list of Dutch words.
+
+    For each word the LLM is called to determine article/translation/difficulty/category.
+    Words already in the database are skipped.
+    Up to 5 LLM calls run concurrently (semaphore-limited to avoid rate limits).
+
+    Returns a list of per-word results:
+      { word, status: "added"|"skipped"|"error", article?, translation?, difficulty?, category?, error? }
+    """
+    import asyncio
+    from datetime import datetime, timezone
+    from app.llm_service import OpenRouterService
+
+    # Sanitise and deduplicate
+    clean_words = list({w.strip().lower() for w in body.words if w.strip()})
+    if not clean_words:
+        raise HTTPException(status_code=400, detail="No valid words provided")
+    if len(clean_words) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 words per import")
+
+    # Find which words already exist
+    existing = {
+        row.word
+        for row in db.query(models.ArticleWord.word)
+        .filter(models.ArticleWord.word.in_(clean_words))
+        .all()
+    }
+
+    to_add = [w for w in clean_words if w not in existing]
+    results = [{"word": w, "status": "skipped", "reason": "already exists"} for w in clean_words if w in existing]
+
+    # Concurrently query LLM with a semaphore so we don't hammer the API
+    semaphore = asyncio.Semaphore(5)
+
+    async def lookup_and_save(word: str) -> dict:
+        async with semaphore:
+            try:
+                data = await OpenRouterService.get_article_word_details(word)
+                row = models.ArticleWord(
+                    word=word,
+                    article=data["article"],
+                    translation=data.get("translation"),
+                    difficulty=data.get("difficulty", "medium"),
+                    category=data.get("category"),
+                    is_active=True,
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(row)
+                db.flush()
+                return {
+                    "word": word,
+                    "status": "added",
+                    "article": data["article"],
+                    "translation": data.get("translation"),
+                    "difficulty": data.get("difficulty", "medium"),
+                    "category": data.get("category"),
+                    "confidence_note": data.get("confidence_note"),
+                }
+            except Exception as e:
+                logger.error(f"Bulk import: LLM failed for '{word}': {e}")
+                return {"word": word, "status": "error", "error": str(e)}
+
+    llm_results = await asyncio.gather(*[lookup_and_save(w) for w in to_add])
+
+    # Commit all successful rows in one transaction
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Bulk import: DB commit failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+    results.extend(llm_results)
+
+    # Sort by original word order for a predictable response
+    word_order = {w: i for i, w in enumerate(clean_words)}
+    results.sort(key=lambda r: word_order.get(r["word"], 999))
+
+    added = sum(1 for r in results if r["status"] == "added")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+    errors = sum(1 for r in results if r["status"] == "error")
+
+    return {
+        "summary": {"added": added, "skipped": skipped, "errors": errors, "total": len(results)},
+        "results": results,
+    }

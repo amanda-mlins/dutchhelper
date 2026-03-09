@@ -3,6 +3,7 @@
         <div class="admin-header">
             <h1>🛠️ Article Word Manager</h1>
             <p class="subtitle">{{ words.length }} words in the database</p>
+            <button class="btn-secondary" @click="openBulkImport">📂 Import File</button>
             <button class="btn-primary" @click="openAdd">+ Add Word</button>
         </div>
 
@@ -162,6 +163,122 @@
                 </div>
             </div>
         </div>
+
+        <!-- Bulk Import Modal -->
+        <div v-if="showBulkModal" class="modal-overlay" @click.self="closeBulkModal">
+            <div class="modal modal-bulk">
+                <h2>📂 Bulk Import Words</h2>
+
+                <!-- Step 1: file/paste input -->
+                <div v-if="bulkStep === 'input'">
+                    <p class="bulk-desc">
+                        Upload a <code>.txt</code> or <code>.csv</code> file, or paste words directly.
+                        Words can be separated by commas, semicolons, or new lines.
+                        The AI will auto-fill article, translation, difficulty and category for each word.
+                    </p>
+
+                    <!-- Drag & drop zone -->
+                    <div class="drop-zone" :class="{ 'drop-zone--over': dragging }" @dragover.prevent="dragging = true"
+                        @dragleave.prevent="dragging = false" @drop.prevent="onFileDrop"
+                        @click="$refs.fileInput.click()">
+                        <input ref="fileInput" type="file" accept=".txt,.csv" class="file-input-hidden"
+                            @change="onFileSelect" />
+                        <div class="drop-zone-icon">📄</div>
+                        <p v-if="!bulkFileName">Click to browse or drag & drop a <strong>.txt</strong> /
+                            <strong>.csv</strong> file
+                        </p>
+                        <p v-else class="file-name">{{ bulkFileName }}</p>
+                    </div>
+
+                    <p class="bulk-or">— or paste words directly —</p>
+
+                    <textarea v-model="bulkPasteText" class="bulk-textarea"
+                        placeholder="appel, boom, auto, huis, fiets&#10;(one word per line or comma-separated)"
+                        rows="5" />
+
+                    <!-- Preview parsed words -->
+                    <div v-if="parsedWords.length" class="parsed-preview">
+                        <span class="parsed-count">{{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : ''
+                        }} detected:</span>
+                        <span class="parsed-chips">
+                            <span v-for="w in parsedWords.slice(0, 30)" :key="w" class="chip">{{ w }}</span>
+                            <span v-if="parsedWords.length > 30" class="chip chip-more">+{{ parsedWords.length - 30 }}
+                                more</span>
+                        </span>
+                    </div>
+
+                    <div v-if="bulkInputError" class="form-error">{{ bulkInputError }}</div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" @click="closeBulkModal">Cancel</button>
+                        <button class="btn-primary" :disabled="!parsedWords.length" @click="startBulkImport">
+                            ✨ Import {{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : '' }} with AI
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: live progress -->
+                <div v-if="bulkStep === 'progress'">
+                    <div class="bulk-progress-header">
+                        <div class="bulk-progress-bar-wrap">
+                            <div class="bulk-progress-bar" :style="{ width: bulkProgressPct + '%' }"></div>
+                        </div>
+                        <span class="bulk-progress-label">{{ bulkDone }} / {{ bulkTotal }}</span>
+                    </div>
+
+                    <div class="bulk-result-table-wrap">
+                        <table class="bulk-result-table">
+                            <thead>
+                                <tr>
+                                    <th>Word</th>
+                                    <th>Article</th>
+                                    <th>Translation</th>
+                                    <th>Difficulty</th>
+                                    <th>Category</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="r in bulkResults" :key="r.word" :class="'row-' + r.status">
+                                    <td class="word-cell">{{ r.word }}</td>
+                                    <td>
+                                        <span v-if="r.article"
+                                            :class="['badge', r.article === 'de' ? 'badge-de' : 'badge-het']">{{
+                                                r.article }}</span>
+                                        <span v-else>—</span>
+                                    </td>
+                                    <td>{{ r.translation || '—' }}</td>
+                                    <td>
+                                        <span v-if="r.difficulty" :class="['badge', `badge-${r.difficulty}`]">{{
+                                            r.difficulty }}</span>
+                                        <span v-else>—</span>
+                                    </td>
+                                    <td>{{ r.category || '—' }}</td>
+                                    <td>
+                                        <span v-if="r.status === 'pending'" class="status-pending">⏳</span>
+                                        <span v-else-if="r.status === 'added'" class="status-added">✅ Added</span>
+                                        <span v-else-if="r.status === 'skipped'" class="status-skipped">⏭ Exists</span>
+                                        <span v-else-if="r.status === 'error'" class="status-error" :title="r.error">❌
+                                            Error</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div v-if="bulkDone === bulkTotal" class="bulk-summary">
+                        <span class="sum-added">✅ {{ bulkSummary.added }} added</span>
+                        <span class="sum-skipped">⏭ {{ bulkSummary.skipped }} already existed</span>
+                        <span v-if="bulkSummary.errors" class="sum-error">❌ {{ bulkSummary.errors }} errors</span>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-primary" :disabled="bulkDone < bulkTotal" @click="closeBulkModal">
+                            {{ bulkDone < bulkTotal ? 'Processing…' : 'Done' }} </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -195,6 +312,31 @@ const deleteTarget = ref(null)
 const aiLoading = ref(false)
 const aiNote = ref('')
 const aiError = ref('')
+
+// Bulk import state
+const showBulkModal = ref(false)
+const bulkStep = ref('input')       // 'input' | 'progress'
+const bulkPasteText = ref('')
+const bulkFileName = ref('')
+const dragging = ref(false)
+const bulkInputError = ref('')
+const bulkResults = ref([])         // per-word result rows shown in live table
+const bulkSummary = ref({ added: 0, skipped: 0, errors: 0 })
+const bulkTotal = ref(0)
+const bulkDone = ref(0)
+const bulkProgressPct = computed(() =>
+    bulkTotal.value ? Math.round((bulkDone.value / bulkTotal.value) * 100) : 0
+)
+
+const parsedWords = computed(() => {
+    const raw = bulkPasteText.value
+    if (!raw.trim()) return []
+    return [...new Set(
+        raw.split(/[\n\r,;]+/)
+            .map(w => w.trim().toLowerCase())
+            .filter(w => w.length > 0)
+    )]
+})
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const filteredWords = computed(() => {
@@ -286,6 +428,98 @@ async function doDelete() {
         deleteTarget.value = null
     } finally {
         saving.value = false
+    }
+}
+
+// ── Bulk import helpers ────────────────────────────────────────────────────
+function openBulkImport() {
+    bulkStep.value = 'input'
+    bulkPasteText.value = ''
+    bulkFileName.value = ''
+    bulkInputError.value = ''
+    bulkResults.value = []
+    bulkSummary.value = { added: 0, skipped: 0, errors: 0 }
+    bulkTotal.value = 0
+    bulkDone.value = 0
+    showBulkModal.value = true
+}
+
+function closeBulkModal() {
+    showBulkModal.value = false
+    // If we just finished an import, refresh the word list
+    if (bulkStep.value === 'progress' && bulkDone.value === bulkTotal.value) {
+        fetchWords()
+    }
+}
+
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve(e.target.result)
+        reader.onerror = () => reject(new Error('Could not read file'))
+        reader.readAsText(file)
+    })
+}
+
+async function onFileSelect(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+        const text = await readFileAsText(file)
+        bulkFileName.value = file.name
+        bulkPasteText.value = text
+    } catch {
+        bulkInputError.value = 'Could not read the file.'
+    }
+    // reset input so same file can be re-selected
+    event.target.value = ''
+}
+
+async function onFileDrop(event) {
+    dragging.value = false
+    const file = event.dataTransfer?.files?.[0]
+    if (!file) return
+    try {
+        const text = await readFileAsText(file)
+        bulkFileName.value = file.name
+        bulkPasteText.value = text
+    } catch {
+        bulkInputError.value = 'Could not read the dropped file.'
+    }
+}
+
+async function startBulkImport() {
+    const wordList = parsedWords.value
+    if (!wordList.length) return
+    if (wordList.length > 200) {
+        bulkInputError.value = 'Maximum 200 words per import. Please split into smaller batches.'
+        return
+    }
+
+    // Switch to progress view and populate pending rows
+    bulkTotal.value = wordList.length
+    bulkDone.value = 0
+    bulkResults.value = wordList.map(w => ({ word: w, status: 'pending' }))
+    bulkStep.value = 'progress'
+
+    try {
+        const ax = auth.getAuthAxios()
+        const { data } = await ax.post('/api/admin/article-words/bulk-import', { words: wordList })
+
+        // Merge server results into the live table
+        const resultMap = Object.fromEntries(data.results.map(r => [r.word, r]))
+        bulkResults.value = bulkResults.value.map(r => resultMap[r.word] ?? r)
+        bulkDone.value = bulkTotal.value
+        bulkSummary.value = data.summary
+    } catch (e) {
+        // Mark all pending rows as error
+        bulkResults.value = bulkResults.value.map(r =>
+            r.status === 'pending'
+                ? { ...r, status: 'error', error: e.response?.data?.detail || 'Request failed' }
+                : r
+        )
+        bulkDone.value = bulkTotal.value
+        bulkSummary.value = { added: 0, skipped: 0, errors: bulkTotal.value }
     }
 }
 
@@ -789,6 +1023,225 @@ tr.inactive {
     color: #991b1b;
 }
 
+/* ── Bulk import modal ─────────────────────────────── */
+.modal-bulk {
+    max-width: 720px;
+}
+
+.bulk-desc {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.bulk-desc code {
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.bulk-or {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+    margin: 12px 0;
+}
+
+/* Drop zone */
+.drop-zone {
+    border: 2px dashed #c4b5fd;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    background: #faf5ff;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 4px;
+}
+
+.drop-zone:hover,
+.drop-zone--over {
+    border-color: #7c3aed;
+    background: #f3e8ff;
+}
+
+.drop-zone-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+}
+
+.drop-zone p {
+    color: #6b7280;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.file-name {
+    color: #7c3aed !important;
+    font-weight: 600;
+}
+
+.file-input-hidden {
+    display: none;
+}
+
+/* Paste textarea */
+.bulk-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    resize: vertical;
+    font-family: monospace;
+    background: #f8f8f8;
+    box-sizing: border-box;
+}
+
+/* Word preview chips */
+.parsed-preview {
+    margin-top: 12px;
+}
+
+.parsed-count {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.parsed-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.chip {
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 12px;
+    padding: 2px 9px;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.chip-more {
+    background: #e5e7eb;
+    color: #6b7280;
+}
+
+/* Progress bar */
+.bulk-progress-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.bulk-progress-bar-wrap {
+    flex: 1;
+    height: 10px;
+    background: #e5e7eb;
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.bulk-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 99px;
+    transition: width 0.3s;
+}
+
+.bulk-progress-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+/* Result table */
+.bulk-result-table-wrap {
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.bulk-result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.bulk-result-table th {
+    padding: 8px 10px;
+    background: #f9fafb;
+    font-weight: 600;
+    color: #6b7280;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+    position: sticky;
+    top: 0;
+}
+
+.bulk-result-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.row-added td {
+    background: #f0fdf4;
+}
+
+.row-error td {
+    background: #fff5f5;
+}
+
+.status-pending {
+    color: #9ca3af;
+}
+
+.status-added {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.status-skipped {
+    color: #6b7280;
+}
+
+.status-error {
+    color: #dc2626;
+    font-weight: 600;
+    cursor: help;
+}
+
+/* Summary bar */
+.bulk-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.sum-added {
+    color: #16a34a;
+}
+
+.sum-skipped {
+    color: #6b7280;
+}
+
+.sum-error {
+    color: #dc2626;
+}
+
 @media (max-width: 600px) {
     .admin-header {
         flex-direction: column;
@@ -805,6 +1258,10 @@ tr.inactive {
 
     .modal {
         padding: 24px 18px;
+    }
+
+    .modal-bulk {
+        max-width: 100%;
     }
 
     .word-input-row {
