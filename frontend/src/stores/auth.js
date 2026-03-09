@@ -126,6 +126,13 @@ export const useAuthStore = defineStore('auth', () => {
         return authAxios
     }
 
+    /** Update the user's profile (nickname). Updates the in-memory user ref on success. */
+    async function updateProfile({ username }) {
+        const { data } = await authAxios.patch(`${API}/api/auth/me`, { username })
+        user.value = data
+        return data
+    }
+
     return {
         accessToken,
         user,
@@ -137,6 +144,7 @@ export const useAuthStore = defineStore('auth', () => {
         login,
         logout,
         handleGoogleCallback,
-        getAuthAxios
+        getAuthAxios,
+        updateProfile,
     }
 })

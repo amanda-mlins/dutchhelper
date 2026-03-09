@@ -16,6 +16,7 @@ import AuthCallback from './views/AuthCallback.vue'
 import AdminWords from './views/AdminWords.vue'
 import AdminVerbs from './views/AdminVerbs.vue'
 import AdminConjunctionSentences from './views/AdminConjunctionSentences.vue'
+import Profile from './views/Profile.vue'
 import { useAuthStore } from './stores/auth.js'
 
 const routes = [
@@ -105,6 +106,11 @@ const routes = [
     path: '/flashcards',
     name: 'Flashcards',
     component: Flashcards
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
   },
 
   // ── Admin routes (require is_admin) ───────────────────────────────────────

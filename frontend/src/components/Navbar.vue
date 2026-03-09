@@ -70,7 +70,10 @@
 
                 <div class="navbar-user">
                     <template v-if="auth.isAuthenticated">
-                        <span class="user-email">{{ auth.user?.email }}</span>
+                        <router-link to="/profile" class="user-profile-link" @click="closeMenu">
+                            <span class="user-avatar-mini">{{ userInitials }}</span>
+                            <span class="user-display">{{ userDisplayName }}</span>
+                        </router-link>
                         <button class="btn-logout" @click="handleLogout">Sign out</button>
                     </template>
                     <template v-else>
@@ -84,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
 import { useRouter } from 'vue-router'
 
@@ -99,6 +102,18 @@ function closeMenu() { menuOpen.value = false }
 function toggleAdmin(e) { e.stopPropagation(); adminOpen.value = !adminOpen.value; gamesOpen.value = false }
 function toggleGames(e) { e.stopPropagation(); gamesOpen.value = !gamesOpen.value; adminOpen.value = false }
 function closeAll() { menuOpen.value = false; adminOpen.value = false; gamesOpen.value = false }
+
+const userDisplayName = computed(() => {
+    if (auth.user?.username) return auth.user.username
+    const email = auth.user?.email || ''
+    const local = email.split('@')[0]
+    return local.length > 18 ? local.slice(0, 16) + '…' : local
+})
+
+const userInitials = computed(() => {
+    const name = auth.user?.username || auth.user?.email || '?'
+    return name.slice(0, 2).toUpperCase()
+})
 
 function onClickOutside() { adminOpen.value = false; gamesOpen.value = false }
 
@@ -268,6 +283,44 @@ async function handleLogout() {
     color: rgba(255, 255, 255, 0.85);
     font-size: 13px;
     max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-profile-link {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    text-decoration: none;
+    border-radius: 20px;
+    padding: 3px 10px 3px 3px;
+    transition: background 0.15s;
+}
+
+.user-profile-link:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.user-avatar-mini {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.user-display {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    font-weight: 500;
+    max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

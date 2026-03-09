@@ -16,11 +16,13 @@ Security notes:
 - Rate limiting on sensitive endpoints is handled by slowapi (configured in main.py).
 """
 import logging
+from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import models
@@ -122,6 +124,50 @@ def refresh(request: Request, response: Response, user: models.User = Depends(ge
 @auth_router.get("/me", response_model=models.UserSchema)
 def get_me(current_user: models.User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
+    return current_user
+
+
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None          # None = don't change; "" = clear nickname
+
+
+@auth_router.patch("/me", response_model=models.UserSchema)
+def update_me(
+    body: UpdateProfileRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Update the current user's profile (nickname). Requires authentication."""
+    import re
+
+    if body.username is not None:
+        nickname = body.username.strip()
+
+        if nickname == "":
+            # Allow clearing the nickname
+            current_user.username = None
+        else:
+            if len(nickname) < 2:
+                raise HTTPException(status_code=422, detail="Nickname must be at least 2 characters.")
+            if len(nickname) > 30:
+                raise HTTPException(status_code=422, detail="Nickname must be 30 characters or fewer.")
+            if not re.match(r'^[\w\-. ]+$', nickname):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Nickname may only contain letters, numbers, spaces, hyphens, underscores and dots.",
+                )
+            # Check uniqueness (case-insensitive)
+            existing = db.query(models.User).filter(
+                models.User.username.ilike(nickname),
+                models.User.id != current_user.id,
+            ).first()
+            if existing:
+                raise HTTPException(status_code=409, detail="That nickname is already taken.")
+            current_user.username = nickname
+
+        db.commit()
+        db.refresh(current_user)
+
     return current_user
 
 
