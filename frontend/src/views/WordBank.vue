@@ -905,12 +905,29 @@ export default {
     background: #eef2ff !important;
 }
 
-.col-check  { width: 36px; }
-.col-word   { min-width: 110px; }
-.col-type   { width: 90px; }
-.col-trans  { min-width: 120px; }
-.col-def    { min-width: 160px; }
-.col-actions { width: 80px; }
+.col-check {
+    width: 36px;
+}
+
+.col-word {
+    min-width: 110px;
+}
+
+.col-type {
+    width: 90px;
+}
+
+.col-trans {
+    min-width: 120px;
+}
+
+.col-def {
+    min-width: 160px;
+}
+
+.col-actions {
+    width: 80px;
+}
 
 .list-word {
     font-weight: 700;
@@ -953,8 +970,13 @@ export default {
     transition: background 0.15s;
 }
 
-.list-action-btn.edit:hover  { background: #e0e7ff; }
-.list-action-btn.delete:hover { background: #fee2e2; }
+.list-action-btn.edit:hover {
+    background: #e0e7ff;
+}
+
+.list-action-btn.delete:hover {
+    background: #fee2e2;
+}
 
 /* ── Misc ───────────────────────────────────────────────────────────────── */
 .spinner {
