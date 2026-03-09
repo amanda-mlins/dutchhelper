@@ -141,6 +141,7 @@ class UserSchema(BaseModel):
     email: str
     username: Optional[str] = None
     is_verified: bool
+    is_admin: bool = False
     created_at: datetime
 
     class Config:
@@ -197,6 +198,20 @@ class ArticleWordMistake(Base):
     user = relationship("User", back_populates="word_mistakes")
 
 
+class ArticleWord(Base):
+    """Default word list for the article game (de/het)."""
+    __tablename__ = "article_words"
+
+    id = Column(Integer, primary_key=True, index=True)
+    word = Column(String, unique=True, nullable=False, index=True)
+    article = Column(String, nullable=False)          # "de" or "het"
+    translation = Column(String, nullable=True)
+    difficulty = Column(String, nullable=False, default="medium")  # easy/medium/hard
+    category = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class VerbConjugation(Base):
     """Cached verb conjugation data fetched from the LLM."""
     __tablename__ = "verb_conjugations"
@@ -210,3 +225,35 @@ class VerbConjugation(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+
+
+# --- Pydantic Schemas for Article Words Admin ---
+
+class ArticleWordCreate(BaseModel):
+    word: str
+    article: str   # "de" or "het"
+    translation: Optional[str] = None
+    difficulty: str = "medium"
+    category: Optional[str] = None
+    is_active: bool = True
+
+class ArticleWordUpdate(BaseModel):
+    word: Optional[str] = None
+    article: Optional[str] = None
+    translation: Optional[str] = None
+    difficulty: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ArticleWordSchema(BaseModel):
+    id: int
+    word: str
+    article: str
+    translation: Optional[str] = None
+    difficulty: str
+    category: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -2,7 +2,7 @@
 Article game service — stateless answer-checking + user-scoped history/stats.
 
 Two modes:
-  guest  — random words from the default list, nothing persisted.
+  guest  — random words from the article_words DB table, nothing persisted.
   user   — words weighted by past mistakes + user's word bank, history saved.
 """
 import random
@@ -11,17 +11,71 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.dutch_article_words import DUTCH_ARTICLE_WORDS, get_random_words, get_word_info
+from app.dutch_article_words import DUTCH_ARTICLE_WORDS  # kept as fallback seed reference
+from app.database import SessionLocal
 from app import models
+import logging
+
+logger = logging.getLogger(__name__)
+# ---------------------------------------------------------------------------
+# DB helpers — used by both guest and logged-in paths
+# ---------------------------------------------------------------------------
+
+def _get_active_words_from_db(db: Session) -> List[Dict[str, Any]]:
+    """Return all active words from the article_words table as plain dicts."""
+    rows = db.query(models.ArticleWord).filter_by(is_active=True).all()
+    return [
+        {
+            "word": r.word,
+            "article": r.article,
+            "translation": r.translation,
+            "difficulty": r.difficulty,
+            "category": r.category,
+        }
+        for r in rows
+    ]
+
+
+def _get_db_word_info(word: str, db: Session) -> Optional[Dict[str, Any]]:
+    """Look up a single word in the DB. Returns None if not found."""
+    row = db.query(models.ArticleWord).filter(
+        models.ArticleWord.word == word.lower(),
+        models.ArticleWord.is_active == True,  # noqa: E712
+    ).first()
+    if not row:
+        return None
+    return {
+        "word": row.word,
+        "article": row.article,
+        "translation": row.translation,
+        "difficulty": row.difficulty,
+        "category": row.category,
+    }
+
+
+def _random_words_from_db(db: Session, count: int) -> List[Dict[str, Any]]:
+    """Return a random sample of active words from the DB."""
+    all_words = _get_active_words_from_db(db)
+    logger.info(f"DB has {len(all_words)} active words; requested {count}")
+    count = min(count, len(all_words))
+    return random.sample(all_words, count) if count > 0 else []
 
 
 # ---------------------------------------------------------------------------
-# Stateless helpers (used by both guest and logged-in paths)
+# Stateless helpers (used by routes for guest and logged-in paths)
 # ---------------------------------------------------------------------------
 
 def get_guest_words(count: int) -> List[Dict[str, Any]]:
-    """Return a random selection from the default word list, article hidden."""
-    words = get_random_words(min(count, len(DUTCH_ARTICLE_WORDS)))
+    """Return a random selection from the DB word list, article hidden."""
+    db = SessionLocal()
+    try:
+        words = _random_words_from_db(db, count)
+    finally:
+        db.close()
+    # Fallback to static list if DB is empty (e.g. before first seed)
+    if not words:
+        from app.dutch_article_words import get_random_words as _static_random
+        words = _static_random(count)
     return _strip_article(words)
 
 
@@ -30,7 +84,16 @@ def check_answer(word: str, user_answer: str) -> Dict[str, Any]:
     Validate a single answer. Stateless — no DB writes.
     Returns a dict the frontend can use directly.
     """
-    info = get_word_info(word)
+    db = SessionLocal()
+    try:
+        info = _get_db_word_info(word, db)
+    finally:
+        db.close()
+
+    # Fallback: check static list (covers words not yet in DB)
+    if not info:
+        from app.dutch_article_words import get_word_info as _static_info
+        info = _static_info(word)
     if not info:
         return {"error": "Word not found", "word": word}
 
@@ -45,6 +108,19 @@ def check_answer(word: str, user_answer: str) -> Dict[str, Any]:
         "difficulty": info.get("difficulty", "unknown"),
         "category": info.get("category", "unknown"),
     }
+
+
+def get_word_info(word: str) -> Optional[Dict[str, Any]]:
+    """Convenience wrapper — used by get_stats hardest_words lookup."""
+    db = SessionLocal()
+    try:
+        info = _get_db_word_info(word, db)
+    finally:
+        db.close()
+    if not info:
+        from app.dutch_article_words import get_word_info as _static_info
+        info = _static_info(word)
+    return info
 
 
 def _strip_article(words: List[Dict]) -> List[Dict]:
@@ -78,12 +154,14 @@ class ArticleGameService:
           "smart"     — 40% mistakes + 30% word-bank nouns + 30% random
           "mistakes"  — 70% mistakes + 30% random
           "wordbank"  — 70% word-bank nouns + 30% random
-          "random"    — fully random from default list
+          "random"    — fully random from DB word list
         """
-        count = max(5, min(count, len(DUTCH_ARTICLE_WORDS)))
+        all_db_words = _get_active_words_from_db(self.db)
+        pool_size = len(all_db_words) or len(DUTCH_ARTICLE_WORDS)
+        count = max(5, min(count, pool_size))
 
         if mode == "random":
-            return _strip_article(get_random_words(count))
+            return _strip_article(_random_words_from_db(self.db, count))
 
         mistake_words = self._get_mistake_words()
         wordbank_words = self._get_wordbank_words()
@@ -105,9 +183,10 @@ class ArticleGameService:
                 [w for w in wordbank_words if w["word"] not in {x["word"] for x in selected}], n_wb
             )
 
-        # Fill with random from default list, no duplicates
+        # Fill remainder from DB word list, no duplicates
         selected_words = {w["word"] for w in selected}
-        pool = [w for w in DUTCH_ARTICLE_WORDS if w["word"] not in selected_words]
+        logger.debug(f"Selected words before random fill: {[w['word'] for w in selected]}")
+        pool = [w for w in all_db_words if w["word"] not in selected_words]
         random.shuffle(pool)
         selected += pool[:n_random]
         random.shuffle(selected)
@@ -127,7 +206,7 @@ class ArticleGameService:
         )
         result = []
         for row in rows:
-            info = get_word_info(row.word)
+            info = _get_db_word_info(row.word, self.db)
             if info:
                 result.append(info)
         return result
@@ -141,7 +220,7 @@ class ArticleGameService:
         )
         result = []
         for uw in user_words:
-            info = get_word_info(uw.word)
+            info = _get_db_word_info(uw.word, self.db)
             if info:
                 result.append(info)
         return result
@@ -266,7 +345,7 @@ class ArticleGameService:
                     "word": h.word,
                     "times_wrong": h.times_wrong,
                     "times_seen": h.times_seen,
-                    "correct_article": (get_word_info(h.word) or {}).get("article", "?"),
+                    "correct_article": (_get_db_word_info(h.word, self.db) or {}).get("article", "?"),
                 }
                 for h in hardest
             ],

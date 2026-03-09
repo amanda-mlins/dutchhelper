@@ -8,6 +8,7 @@ import WordBank from './views/WordBank.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import AuthCallback from './views/AuthCallback.vue'
+import AdminWords from './views/AdminWords.vue'
 import { useAuthStore } from './stores/auth.js'
 
 const routes = [
@@ -70,6 +71,14 @@ const routes = [
     path: '/word-bank',
     name: 'WordBank',
     component: WordBank
+  },
+
+  // ── Admin routes (require is_admin) ───────────────────────────────────────
+  {
+    path: '/admin/words',
+    name: 'AdminWords',
+    component: AdminWords,
+    meta: { adminOnly: true }
   }
 ]
 
@@ -95,6 +104,11 @@ router.beforeEach(async (to) => {
   // Route requires auth and user is not logged in → redirect to login
   if (!to.meta.public && !auth.isAuthenticated) {
     return { name: 'Login', query: { redirect: to.fullPath } }
+  }
+
+  // Route requires admin and user is not admin → redirect home
+  if (to.meta.adminOnly && !auth.user?.is_admin) {
+    return { name: 'Home' }
   }
 })
 

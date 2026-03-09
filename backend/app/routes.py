@@ -449,3 +449,76 @@ def delete_user_word(
     return Response(status_code=204)
 
 
+# ============================================================================
+# Admin — Article Words CRUD
+# ============================================================================
+
+@router.get("/admin/article-words", response_model=List[models.ArticleWordSchema])
+def admin_list_article_words(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Return every word in the article_words table (admin only)."""
+    return db.query(models.ArticleWord).order_by(models.ArticleWord.word).all()
+
+
+@router.post("/admin/article-words", response_model=models.ArticleWordSchema, status_code=201)
+def admin_create_article_word(
+    body: models.ArticleWordCreate,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Add a new word to the article_words table (admin only)."""
+    if body.article not in ("de", "het"):
+        raise HTTPException(status_code=400, detail="article must be 'de' or 'het'")
+    if db.query(models.ArticleWord).filter_by(word=body.word.lower()).first():
+        raise HTTPException(status_code=409, detail=f"Word '{body.word}' already exists")
+    from datetime import datetime, timezone
+    row = models.ArticleWord(
+        word=body.word.lower(),
+        article=body.article,
+        translation=body.translation,
+        difficulty=body.difficulty,
+        category=body.category,
+        is_active=body.is_active,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.put("/admin/article-words/{word_id}", response_model=models.ArticleWordSchema)
+def admin_update_article_word(
+    word_id: int,
+    body: models.ArticleWordUpdate,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Update a word in the article_words table (admin only)."""
+    row = db.query(models.ArticleWord).filter_by(id=word_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Word not found")
+    if body.article is not None and body.article not in ("de", "het"):
+        raise HTTPException(status_code=400, detail="article must be 'de' or 'het'")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/admin/article-words/{word_id}", status_code=204)
+def admin_delete_article_word(
+    word_id: int,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Delete a word from the article_words table (admin only)."""
+    row = db.query(models.ArticleWord).filter_by(id=word_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Word not found")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)

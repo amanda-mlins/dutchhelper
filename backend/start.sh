@@ -4,6 +4,9 @@ set -e
 echo "Running Alembic migrations..."
 python -m alembic upgrade head
 
+echo "Seeding article words table..."
+python seed_article_words.py
+
 echo "Starting uvicorn on port ${PORT:-8000}..."
 exec uvicorn app.main:app \
     --host 0.0.0.0 \

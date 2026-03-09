@@ -29,6 +29,10 @@
                         @click="closeMenu">
                         Word Bank<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                     </router-link>
+                    <router-link v-if="auth.user?.is_admin" to="/admin/words" class="nav-link nav-admin"
+                        @click="closeMenu">
+                        🛠️ Admin
+                    </router-link>
                 </div>
 
                 <div class="navbar-user">
@@ -136,6 +140,16 @@ async function handleLogout() {
     margin-left: 4px;
     vertical-align: middle;
     opacity: 0.85;
+}
+
+.nav-admin {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.nav-admin:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
 }
 
 .navbar-user {
