@@ -167,24 +167,21 @@ class ArticleGameService:
 
         if mode == "mistakes":
             n_mistakes = int(count * 0.70)
-            n_random = count - n_mistakes
             selected = self._pick(mistake_words, n_mistakes)
         elif mode == "wordbank":
             n_wb = int(count * 0.70)
-            n_random = count - n_wb
             selected = self._pick(wordbank_words, n_wb)
         else:  # smart
             n_mistakes = int(count * 0.40)
             n_wb = int(count * 0.30)
-            n_random = count - n_mistakes - n_wb
             selected = self._pick(mistake_words, n_mistakes)
             selected += self._pick(
                 [w for w in wordbank_words if w["word"] not in {x["word"] for x in selected}], n_wb
             )
-            n_random = count - len(selected)
 
         # Fill remainder from DB word list, no duplicates
         selected_words = {w["word"] for w in selected}
+        n_random = count - len(selected)
         pool = [w for w in all_db_words if w["word"] not in selected_words]
         random.shuffle(pool)
         selected += pool[:n_random]
