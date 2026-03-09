@@ -43,6 +43,10 @@
                         </div>
                     </div>
                 </div>
+                <div v-if="stats.review_queue_size" class="review-notice">
+                    🔁 You have <strong>{{ stats.review_queue_size }}</strong> sentence{{ stats.review_queue_size !== 1
+                        ? 's' : '' }} queued for review — they'll appear first in your next game!
+                </div>
             </div>
 
             <!-- Conjunction type filter -->
@@ -99,7 +103,7 @@
                 <div class="progress-info">
                     <span>{{ currentIndex + 1 }} / {{ questionCount }}</span>
                     <span class="diff-badge diff-badge--{{ difficulty }}">{{DIFFICULTIES.find(d => d.value ===
-                        difficulty)?.icon }} {{ difficulty }}</span>
+                        difficulty)?.icon}} {{ difficulty }}</span>
                     <span class="score-inline">✓ {{ correctSoFar }}</span>
                 </div>
                 <div class="progress-bar-wrap">
@@ -118,6 +122,7 @@
                 <div class="verb-header">
                     <span class="verb-label">Conjunction type</span>
                     <span class="conj-type-badge">{{ formatType(currentQuestion.conjunction_type) }}</span>
+                    <span v-if="currentQuestion.is_review" class="review-badge">🔁 Review</span>
                 </div>
 
                 <!-- Sentence card -->
@@ -175,6 +180,9 @@
                     </p>
                     <p class="feedback-sentence-full">
                         {{ currentQuestion.sentence.replace('___', currentQuestion.correct_answer) }}
+                    </p>
+                    <p v-if="currentQuestion.explanation" class="feedback-explanation">
+                        💡 {{ currentQuestion.explanation }}
                     </p>
                 </div>
 
@@ -296,6 +304,7 @@ export default {
             isLoadingQuestion: false,
             questionError: null,
             answers: [],
+            seenSentenceIds: [],   // sentence_ids used so far in this game (anti-repeat)
 
             // results
             finalScore: 0,
@@ -369,8 +378,13 @@ export default {
 
                 const { data } = await authAxios.post('/api/conjunction-game/question', {
                     conjunction_types: typesPayload,
+                    excluded_sentence_ids: this.seenSentenceIds,
                 });
                 this.currentQuestion = data;
+                // Track this sentence so it won't repeat in the same game
+                if (data.sentence_id) {
+                    this.seenSentenceIds = [...this.seenSentenceIds, data.sentence_id];
+                }
                 this.currentOptions = this.buildOptions(data);
                 this.$nextTick(() => this.$refs.answerInput?.focus());
             } catch (err) {
@@ -409,6 +423,7 @@ export default {
             this.answered = true;
 
             this.answers.push({
+                sentence_id: this.currentQuestion.sentence_id || null,
                 conjunction: this.currentQuestion.conjunction,
                 conjunction_type: this.currentQuestion.conjunction_type,
                 sentence: this.currentQuestion.sentence,
@@ -416,6 +431,7 @@ export default {
                 user_answer: userAnswer,
                 is_correct: isCorrect,
                 english_hint: this.currentQuestion.english_hint,
+                explanation: this.currentQuestion.explanation || null,
             });
         },
 
@@ -450,6 +466,7 @@ export default {
         resetToSetup() {
             this.phase = 'setup';
             this.answers = [];
+            this.seenSentenceIds = [];
             this.currentIndex = 0;
             this.currentQuestion = null;
             this.typedAnswer = '';
@@ -497,6 +514,29 @@ export default {
     color: #555;
     margin-bottom: 12px;
     font-weight: 600;
+}
+
+/* Review queue notice (setup screen) */
+.review-notice {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #92400e;
+    text-align: center;
+}
+
+/* Review badge (playing screen) */
+.review-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fbbf24;
 }
 
 /* Mini stats */
@@ -989,6 +1029,17 @@ export default {
     color: #555;
     font-style: italic;
     margin-top: 8px;
+}
+
+.feedback-explanation {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.55);
+    border-left: 3px solid currentColor;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    opacity: 0.9;
 }
 
 .btn-next {

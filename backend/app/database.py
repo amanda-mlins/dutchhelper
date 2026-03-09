@@ -32,6 +32,24 @@ def _run_migrations():
             # Column already exists — ignore
             pass
 
+        # Add sentence_id FK column to conjunction_game_answers (new in v2)
+        try:
+            conn.execute(text(
+                "ALTER TABLE conjunction_game_answers ADD COLUMN sentence_id INTEGER REFERENCES conjunction_sentences(id)"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+
+        # Add explanation column to conjunction_sentences (new in v3)
+        try:
+            conn.execute(text(
+                "ALTER TABLE conjunction_sentences ADD COLUMN explanation TEXT"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+
 def get_db():
     """
     Dependency to get a database session.

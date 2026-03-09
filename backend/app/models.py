@@ -284,6 +284,8 @@ class ConjunctionGameAnswer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("conjunction_game_sessions.id"), nullable=False)
+    # Optional FK to the canonical sentence cache (NULL for legacy rows)
+    sentence_id = Column(Integer, ForeignKey("conjunction_sentences.id"), nullable=True)
     conjunction = Column(String, nullable=False)       # the conjunction being tested
     conjunction_type = Column(String, nullable=True)   # e.g. 'coordinating', 'subordinating'
     sentence = Column(String, nullable=False)          # full sentence with blank
@@ -293,6 +295,58 @@ class ConjunctionGameAnswer(Base):
     english_hint = Column(String, nullable=True)       # English translation of the sentence
 
     session = relationship("ConjunctionGameSession", back_populates="answers")
+    cached_sentence = relationship("ConjunctionSentence", back_populates="game_answers")
+
+
+class ConjunctionSentence(Base):
+    """
+    Canonical cache of LLM-generated conjunction sentences.
+
+    Every time the LLM produces a new sentence we store it here so:
+      - We can serve it again without another LLM call.
+      - We track global usage + success rates.
+      - Users never see the same sentence twice in the same game.
+    """
+    __tablename__ = "conjunction_sentences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conjunction = Column(String, nullable=False, index=True)
+    conjunction_type = Column(String, nullable=False)
+    sentence = Column(String, nullable=False)          # Dutch sentence with ___
+    correct_answer = Column(String, nullable=False)
+    english_hint = Column(String, nullable=True)
+    distractors = Column(Text, nullable=True)          # JSON list of 3 strings
+    explanation = Column(Text, nullable=True)          # Why correct_answer is right (and distractors aren't)
+    # Global aggregate stats (across ALL users)
+    times_seen = Column(Integer, default=0, nullable=False)
+    times_correct = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user_stats = relationship("ConjunctionSentenceStat", back_populates="sentence", cascade="all, delete-orphan")
+    game_answers = relationship("ConjunctionGameAnswer", back_populates="cached_sentence")
+
+
+class ConjunctionSentenceStat(Base):
+    """
+    Per-user statistics for a specific ConjunctionSentence.
+
+    Used for:
+      - Knowing if a user has already seen a sentence (avoid repeats).
+      - Flagging sentences the user got wrong so they resurface in future games.
+    """
+    __tablename__ = "conjunction_sentence_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sentence_id = Column(Integer, ForeignKey("conjunction_sentences.id"), nullable=False)
+    times_seen = Column(Integer, default=0, nullable=False)
+    times_correct = Column(Integer, default=0, nullable=False)
+    last_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # True when user got this wrong and it should appear in next game(s)
+    needs_review = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User")
+    sentence = relationship("ConjunctionSentence", back_populates="user_stats")
 
 
 # --- Pydantic Schemas for Article Words Admin ---

@@ -851,7 +851,8 @@ Return ONLY a JSON object with exactly these keys:
   "sentence": "A full, natural Dutch sentence where '{conjunction}' is replaced by ___",
   "correct_answer": "{conjunction}",
   "english_hint": "English translation of the full sentence (with '{conjunction}' filled in)",
-  "distractors": ["wrong_conjunction_1", "wrong_conjunction_2", "wrong_conjunction_3"]
+  "distractors": ["wrong_conjunction_1", "wrong_conjunction_2", "wrong_conjunction_3"],
+  "explanation": "1-2 sentences in English explaining why '{conjunction}' is correct here and why each distractor would be wrong"
 }}
 
 Rules:
@@ -859,7 +860,8 @@ Rules:
 2. The blank (___) must appear exactly where the conjunction goes.
 3. The three distractors must be other real Dutch conjunctions that are plausible but WRONG in this sentence.
 4. Do NOT use the conjunction "{conjunction}" as a distractor.
-5. Return ONLY the raw JSON — no markdown, no extra text.
+5. The explanation must be clear and educational — explain the meaning/grammar reason.
+6. Return ONLY the raw JSON — no markdown, no extra text.
 """
         content = ""
         try:
@@ -872,7 +874,7 @@ Rules:
                         {"role": "user", "content": prompt},
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 350,
+                    "max_tokens": 500,
                 },
             )
             content = response.json()["choices"][0]["message"]["content"].strip()
@@ -882,7 +884,7 @@ Rules:
                     content = content[4:]
             data = json.loads(content)
 
-            required = ["conjunction", "conjunction_type", "sentence", "correct_answer", "english_hint", "distractors"]
+            required = ["conjunction", "conjunction_type", "sentence", "correct_answer", "english_hint", "distractors", "explanation"]
             for field in required:
                 if field not in data:
                     raise ProcessingError(f"LLM response missing field: {field}")

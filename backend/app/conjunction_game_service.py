@@ -2,14 +2,17 @@
 Dutch conjunction fill-in-the-blank game service.
 
 Flow:
-  1. Frontend requests a question (backend picks a conjunction at random).
-  2. Backend calls LLM to generate a sentence with a blank + correct answer + distractors.
-  3. Frontend submits answers → backend scores and saves a ConjunctionGameSession.
+  1. Frontend requests a question, sending already-used sentence IDs to avoid repeats.
+  2. Backend checks if this user has any "needs_review" sentences first (spaced repetition).
+  3. Otherwise it tries to serve a cached ConjunctionSentence the user hasn't seen today.
+  4. If no suitable cache hit, the LLM generates a new sentence which is then stored.
+  5. Frontend submits answers → backend scores, saves session, and updates per-user stats.
 """
+import json
 import logging
 import random
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
@@ -62,7 +65,6 @@ CONJUNCTION_POOL: List[tuple[str, str]] = [
     ("zoals", "subordinating"),
     # Subordinating — content
     ("dat", "subordinating"),
-    ("of", "subordinating"),  # indirect question
     ("wie", "subordinating"),
     # Correlative
     ("zowel ... als", "correlative"),
@@ -71,31 +73,148 @@ CONJUNCTION_POOL: List[tuple[str, str]] = [
     ("niet alleen ... maar ook", "correlative"),
 ]
 
-# Flat list for random sampling
+# Lookup: conjunction → type (last write wins for duplicates)
 _POOL_LOOKUP: Dict[str, str] = {c: t for c, t in CONJUNCTION_POOL}
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _sentence_to_dict(s: models.ConjunctionSentence, is_review: bool = False) -> Dict[str, Any]:
+    """Serialize a ConjunctionSentence ORM row to the question payload the frontend expects."""
+    try:
+        distractors = json.loads(s.distractors) if s.distractors else []
+    except (ValueError, TypeError):
+        distractors = []
+    return {
+        "sentence_id": s.id,
+        "conjunction": s.conjunction,
+        "conjunction_type": s.conjunction_type,
+        "sentence": s.sentence,
+        "correct_answer": s.correct_answer,
+        "english_hint": s.english_hint,
+        "distractors": distractors,
+        "explanation": s.explanation,
+        "is_review": is_review,  # badge hint for frontend
+    }
+
+
+def _pick_from_pool(
+    conjunction: Optional[str],
+    conjunction_types: Optional[List[str]],
+) -> tuple[str, str]:
+    """Choose a (conjunction, type) pair from the pool."""
+    if conjunction:
+        return conjunction, _POOL_LOOKUP.get(conjunction, "coordinating")
+    pool = CONJUNCTION_POOL
+    if conjunction_types:
+        pool = [(c, t) for c, t in CONJUNCTION_POOL if t in conjunction_types]
+    if not pool:
+        pool = CONJUNCTION_POOL
+    return random.choice(pool)
+
+
+# ---------------------------------------------------------------------------
+# Main question generator — called by the route handler
+# ---------------------------------------------------------------------------
+
 async def generate_question(
+    db: Session,
+    user_id: int,
     conjunction: Optional[str] = None,
     conjunction_types: Optional[List[str]] = None,
+    excluded_sentence_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
-    Ask the LLM to generate a fill-in-the-blank question.
+    Return a conjunction fill-in-the-blank question for `user_id`.
 
-    If `conjunction` is provided, use it; otherwise pick randomly from the pool
-    (optionally filtered by `conjunction_types`).
+    Priority order:
+      1. Cached sentences the user previously got *wrong* (needs_review=True),
+         not already in this game session (excluded_sentence_ids).
+      2. Cached sentences matching the filters that this user hasn't seen yet,
+         not already in this game session.
+      3. Generate a new sentence via LLM, store it, and return it.
     """
-    if conjunction:
-        c_type = _POOL_LOOKUP.get(conjunction, "coordinating")
-    else:
-        pool = CONJUNCTION_POOL
-        if conjunction_types:
-            pool = [(c, t) for c, t in CONJUNCTION_POOL if t in conjunction_types]
-        if not pool:
-            pool = CONJUNCTION_POOL
-        conjunction, c_type = random.choice(pool)
+    excluded: Set[int] = set(excluded_sentence_ids or [])
 
-    return await OpenRouterService.generate_conjunction_question(conjunction, c_type)
+    # ── 1. Review queue: sentences the user got wrong previously ──────────
+    review_q = (
+        db.query(models.ConjunctionSentenceStat)
+        .join(models.ConjunctionSentence)
+        .filter(
+            models.ConjunctionSentenceStat.user_id == user_id,
+            models.ConjunctionSentenceStat.needs_review == True,  # noqa: E712
+        )
+    )
+    if excluded:
+        review_q = review_q.filter(
+            models.ConjunctionSentenceStat.sentence_id.notin_(excluded)
+        )
+    if conjunction_types:
+        review_q = review_q.filter(
+            models.ConjunctionSentence.conjunction_type.in_(conjunction_types)
+        )
+    if conjunction:
+        review_q = review_q.filter(
+            models.ConjunctionSentence.conjunction == conjunction
+        )
+    review_candidates = review_q.all()
+    if review_candidates:
+        stat = random.choice(review_candidates)
+        return _sentence_to_dict(stat.sentence, is_review=True)
+
+    # ── 2. Cache hit: unseen sentences matching filters ───────────────────
+    # "Unseen" = no stat row for this user OR times_seen == 0
+    seen_ids_q = (
+        db.query(models.ConjunctionSentenceStat.sentence_id)
+        .filter(
+            models.ConjunctionSentenceStat.user_id == user_id,
+            models.ConjunctionSentenceStat.times_seen > 0,
+        )
+    )
+    seen_ids = {row.sentence_id for row in seen_ids_q.all()}
+    already_excluded = excluded | seen_ids
+
+    cached_q = db.query(models.ConjunctionSentence)
+    if already_excluded:
+        cached_q = cached_q.filter(
+            models.ConjunctionSentence.id.notin_(already_excluded)
+        )
+    if conjunction_types:
+        cached_q = cached_q.filter(
+            models.ConjunctionSentence.conjunction_type.in_(conjunction_types)
+        )
+    if conjunction:
+        cached_q = cached_q.filter(
+            models.ConjunctionSentence.conjunction == conjunction
+        )
+    cached_candidates = cached_q.all()
+    if cached_candidates:
+        sentence = random.choice(cached_candidates)
+        return _sentence_to_dict(sentence, is_review=False)
+
+    # ── 3. LLM fallback ───────────────────────────────────────────────────
+    conj, c_type = _pick_from_pool(conjunction, conjunction_types)
+    raw = await OpenRouterService.generate_conjunction_question(conj, c_type)
+
+    # Persist the new sentence
+    new_sentence = models.ConjunctionSentence(
+        conjunction=raw["conjunction"],
+        conjunction_type=raw["conjunction_type"],
+        sentence=raw["sentence"],
+        correct_answer=raw["correct_answer"],
+        english_hint=raw.get("english_hint"),
+        distractors=json.dumps(raw.get("distractors", [])),
+        explanation=raw.get("explanation"),
+        times_seen=0,
+        times_correct=0,
+    )
+    db.add(new_sentence)
+    db.commit()
+    db.refresh(new_sentence)
+
+    return _sentence_to_dict(new_sentence, is_review=False)
 
 
 class ConjunctionGameService:
@@ -123,6 +242,7 @@ class ConjunctionGameService:
                 "questions_answered": 0,
                 "current_streak": 0,
                 "hardest_conjunctions": [],
+                "review_queue_size": self._review_queue_size(),
             }
 
         total = len(sessions)
@@ -137,7 +257,7 @@ class ConjunctionGameService:
             else:
                 break
 
-        # Hardest conjunctions
+        # Hardest conjunctions — aggregate from per-user sentence stats
         conj_stats: Dict[str, Dict] = {}
         for s in sessions:
             for ans in s.answers:
@@ -169,7 +289,19 @@ class ConjunctionGameService:
             "questions_answered": questions_answered,
             "current_streak": streak,
             "hardest_conjunctions": hardest,
+            "review_queue_size": self._review_queue_size(),
         }
+
+    def _review_queue_size(self) -> int:
+        """Number of sentences currently flagged needs_review for this user."""
+        return (
+            self.db.query(models.ConjunctionSentenceStat)
+            .filter(
+                models.ConjunctionSentenceStat.user_id == self.user_id,
+                models.ConjunctionSentenceStat.needs_review == True,  # noqa: E712
+            )
+            .count()
+        )
 
     def get_history(self) -> List[Dict[str, Any]]:
         sessions = (
@@ -190,6 +322,7 @@ class ConjunctionGameService:
                 "answers": [
                     {
                         "id": a.id,
+                        "sentence_id": a.sentence_id,
                         "conjunction": a.conjunction,
                         "conjunction_type": a.conjunction_type,
                         "sentence": a.sentence,
@@ -205,14 +338,16 @@ class ConjunctionGameService:
 
     def save_game(self, answers: List[Dict[str, Any]]) -> models.ConjunctionGameSession:
         """
-        Persist a completed game session.
-        `answers` is a list of dicts with keys:
+        Persist a completed game session and update per-sentence + per-user stats.
+
+        Each answer dict must have:
             conjunction, conjunction_type, sentence, correct_answer,
-            user_answer, english_hint
+            user_answer, english_hint, sentence_id (optional)
         """
         if not answers:
             raise ProcessingError("No answers provided")
 
+        # Score answers
         scored = []
         for a in answers:
             user_ans = (a.get("user_answer") or "").strip().lower()
@@ -223,6 +358,7 @@ class ConjunctionGameService:
         score = sum(1 for a in scored if a["is_correct"])
         accuracy = round(score / len(scored) * 100)
 
+        # Persist session
         session = models.ConjunctionGameSession(
             user_id=self.user_id,
             played_at=datetime.now(timezone.utc),
@@ -234,8 +370,12 @@ class ConjunctionGameService:
         self.db.flush()
 
         for a in scored:
+            sentence_id: Optional[int] = a.get("sentence_id")
+
+            # Create game answer row
             self.db.add(models.ConjunctionGameAnswer(
                 session_id=session.id,
+                sentence_id=sentence_id,
                 conjunction=a.get("conjunction", ""),
                 conjunction_type=a.get("conjunction_type"),
                 sentence=a.get("sentence", ""),
@@ -244,6 +384,38 @@ class ConjunctionGameService:
                 is_correct=a["is_correct"],
                 english_hint=a.get("english_hint"),
             ))
+
+            if sentence_id:
+                # Update global sentence counters
+                sent = self.db.get(models.ConjunctionSentence, sentence_id)
+                if sent:
+                    sent.times_seen = (sent.times_seen or 0) + 1
+                    if a["is_correct"]:
+                        sent.times_correct = (sent.times_correct or 0) + 1
+
+                # Upsert per-user sentence stat
+                stat = (
+                    self.db.query(models.ConjunctionSentenceStat)
+                    .filter_by(user_id=self.user_id, sentence_id=sentence_id)
+                    .first()
+                )
+                if stat is None:
+                    stat = models.ConjunctionSentenceStat(
+                        user_id=self.user_id,
+                        sentence_id=sentence_id,
+                        times_seen=0,
+                        times_correct=0,
+                        needs_review=False,
+                    )
+                    self.db.add(stat)
+
+                stat.times_seen = (stat.times_seen or 0) + 1
+                stat.last_seen_at = datetime.now(timezone.utc)
+                if a["is_correct"]:
+                    stat.times_correct = (stat.times_correct or 0) + 1
+                    stat.needs_review = False   # mastered — remove from review queue
+                else:
+                    stat.needs_review = True    # got it wrong — resurface later
 
         self.db.commit()
         self.db.refresh(session)

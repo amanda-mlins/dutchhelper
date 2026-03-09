@@ -530,6 +530,7 @@ from app.conjunction_game_service import ConjunctionGameService, generate_questi
 class ConjunctionGameQuestionRequest(BaseModel):
     conjunction: Optional[str] = None              # Specific conjunction; omit to pick randomly
     conjunction_types: Optional[List[str]] = None  # Filter by type(s): coordinating / subordinating / correlative
+    excluded_sentence_ids: Optional[List[int]] = None  # IDs already used in this game session
 
 class ConjunctionGameSaveRequest(BaseModel):
     answers: List[dict]
@@ -538,18 +539,25 @@ class ConjunctionGameSaveRequest(BaseModel):
 @router.post("/conjunction-game/question")
 async def api_conjunction_game_question(
     body: ConjunctionGameQuestionRequest,
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Generate a single conjunction fill-in-the-blank question.
+    Return a conjunction fill-in-the-blank question.
+
+    Priority: needs_review sentences → unseen cached sentences → LLM-generated (then cached).
+    Pass excluded_sentence_ids to avoid repeating questions within the same game session.
     Requires login.
     """
     from app.exceptions import ProcessingError
     conjunction = (body.conjunction or "").strip().lower() or None
     try:
         question = await conj_generate_question(
+            db=db,
+            user_id=current_user.id,
             conjunction=conjunction,
             conjunction_types=body.conjunction_types or None,
+            excluded_sentence_ids=body.excluded_sentence_ids or [],
         )
         return question
     except ProcessingError as e:
@@ -600,6 +608,58 @@ def api_conjunction_game_history(
     """Return all conjunction game sessions with per-answer detail. Requires login."""
     svc = ConjunctionGameService(db, current_user.id)
     return svc.get_history()
+
+
+@router.get("/conjunction-game/sentence-pool")
+def api_conjunction_game_sentence_pool(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Return all cached conjunction sentences with global and per-user stats.
+    Useful for admins / curious players to see the sentence library.
+    Requires login.
+    """
+    import json as _json
+
+    sentences = (
+        db.query(models.ConjunctionSentence)
+        .order_by(models.ConjunctionSentence.conjunction, models.ConjunctionSentence.id)
+        .all()
+    )
+
+    # Build a lookup: sentence_id → user stat row
+    user_stats = {
+        row.sentence_id: row
+        for row in db.query(models.ConjunctionSentenceStat).filter_by(user_id=current_user.id).all()
+    }
+
+    result = []
+    for s in sentences:
+        us = user_stats.get(s.id)
+        global_rate = (
+            round((1 - s.times_correct / s.times_seen) * 100)
+            if s.times_seen else None
+        )
+        result.append({
+            "id": s.id,
+            "conjunction": s.conjunction,
+            "conjunction_type": s.conjunction_type,
+            "sentence": s.sentence,
+            "correct_answer": s.correct_answer,
+            "english_hint": s.english_hint,
+            "distractors": _json.loads(s.distractors) if s.distractors else [],
+            "global_times_seen": s.times_seen,
+            "global_times_correct": s.times_correct,
+            "global_error_rate": global_rate,
+            "created_at": s.created_at.isoformat(),
+            # Per-user fields (None if user has never seen this sentence)
+            "user_times_seen": us.times_seen if us else 0,
+            "user_times_correct": us.times_correct if us else 0,
+            "user_needs_review": us.needs_review if us else False,
+            "user_last_seen_at": us.last_seen_at.isoformat() if us else None,
+        })
+    return result
 
 
 # --- Word Bank API Endpoints (require authentication) ---
