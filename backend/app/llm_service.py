@@ -630,3 +630,58 @@ Ensure the JSON is properly formatted and valid."""
                 "translation_en": "Error fetching translation.",
                 "example": "Error fetching example."
             }
+
+    @staticmethod
+    async def get_article_word_details(word: str) -> dict:
+        """
+        Ask the LLM to determine the Dutch article (de/het), English translation,
+        difficulty, and category for a given Dutch noun.
+
+        Returns a dict with keys: article, translation, difficulty, category, confidence_note.
+        """
+        client = OpenRouterService.get_client()
+        prompt = f"""You are a Dutch language expert. Analyse the Dutch noun "{word}" and return ONLY a JSON object with these exact keys:
+
+- "article": "de" or "het" (the Dutch definite article for this noun)
+- "translation": the most common English translation (a short word or phrase)
+- "difficulty": one of "easy", "medium", or "hard" based on how well-known the word is for Dutch learners
+- "category": one of these categories — food, nature, animal, object, place, person, body, transport, time, abstract — choose the best fit
+- "confidence_note": a very short note explaining the article choice (1 sentence max)
+
+Rules:
+- Use only the grammatical gender of the word itself; do NOT consider compound forms.
+- If the word is not a Dutch noun, still return the JSON but set article to "de" and add a note in confidence_note.
+- Return ONLY the raw JSON object, no markdown fences, no extra text.
+
+Example for "appel":
+{{"article":"de","translation":"apple","difficulty":"easy","category":"food","confidence_note":"'appel' is a common de-word (masculine noun)."}}
+"""
+        try:
+            response = await client.post(
+                "/chat/completions",
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a precise Dutch language assistant. Always return valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 300,
+                },
+            )
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            # Strip markdown fences if the model adds them anyway
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            data = json.loads(content)
+            # Validate / normalise
+            if data.get("article") not in ("de", "het"):
+                data["article"] = "de"
+            if data.get("difficulty") not in ("easy", "medium", "hard"):
+                data["difficulty"] = "medium"
+            return data
+        except Exception as e:
+            logger.error(f"Error fetching article details from LLM for '{word}': {e}")
+            raise ProcessingError(f"LLM failed to analyse '{word}': {e}")

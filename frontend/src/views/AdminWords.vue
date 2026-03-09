@@ -88,10 +88,29 @@
             <div class="modal">
                 <h2>{{ editingWord ? 'Edit Word' : 'Add New Word' }}</h2>
                 <form @submit.prevent="saveWord" class="word-form">
+
+                    <!-- Word input + AI auto-fill (only shown when adding) -->
                     <label>
                         Word *
-                        <input v-model="form.word" required placeholder="e.g. appel" :disabled="!!editingWord" />
+                        <div class="word-input-row">
+                            <input v-model="form.word" required placeholder="e.g. appel" :disabled="!!editingWord"
+                                class="word-input" />
+                            <button v-if="!editingWord" type="button" class="btn-ai"
+                                :disabled="!form.word.trim() || aiLoading" @click="autofillWithAI"
+                                title="Let the AI fill in article, translation, difficulty and category">
+                                <span v-if="aiLoading" class="ai-spinner">⏳</span>
+                                <span v-else>✨ AI Fill</span>
+                            </button>
+                        </div>
                     </label>
+
+                    <!-- AI result banner -->
+                    <div v-if="aiNote" class="ai-note">
+                        <span class="ai-note-icon">🤖</span>
+                        <span>{{ aiNote }}</span>
+                    </div>
+                    <div v-if="aiError" class="ai-error">{{ aiError }}</div>
+
                     <label>
                         Article *
                         <select v-model="form.article" required>
@@ -171,6 +190,11 @@ const form = ref(defaultForm())
 const formError = ref('')
 const saving = ref(false)
 const deleteTarget = ref(null)
+
+// AI auto-fill state
+const aiLoading = ref(false)
+const aiNote = ref('')
+const aiError = ref('')
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const filteredWords = computed(() => {
@@ -274,6 +298,8 @@ function openAdd() {
     editingWord.value = null
     form.value = defaultForm()
     formError.value = ''
+    aiNote.value = ''
+    aiError.value = ''
     showModal.value = true
 }
 
@@ -281,12 +307,37 @@ function openEdit(w) {
     editingWord.value = w
     form.value = { word: w.word, article: w.article, translation: w.translation || '', difficulty: w.difficulty, category: w.category || '', is_active: w.is_active }
     formError.value = ''
+    aiNote.value = ''
+    aiError.value = ''
     showModal.value = true
 }
 
 function closeModal() {
     showModal.value = false
     editingWord.value = null
+    aiNote.value = ''
+    aiError.value = ''
+}
+
+async function autofillWithAI() {
+    const word = form.value.word.trim().toLowerCase()
+    if (!word) return
+    aiLoading.value = true
+    aiNote.value = ''
+    aiError.value = ''
+    try {
+        const ax = auth.getAuthAxios()
+        const { data } = await ax.post('/api/admin/article-words/lookup', { word })
+        form.value.article = data.article || form.value.article
+        form.value.translation = data.translation || form.value.translation
+        form.value.difficulty = data.difficulty || form.value.difficulty
+        form.value.category = data.category || form.value.category
+        aiNote.value = data.confidence_note || 'Fields filled by AI — please review before saving.'
+    } catch (e) {
+        aiError.value = e.response?.data?.detail || 'AI lookup failed. Please fill the fields manually.'
+    } finally {
+        aiLoading.value = false
+    }
 }
 
 function confirmDelete(w) {
@@ -659,6 +710,85 @@ tr.inactive {
     margin-top: 8px;
 }
 
+/* AI auto-fill elements */
+.word-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.word-input {
+    flex: 1;
+}
+
+.btn-ai {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    padding: 9px 14px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+
+.btn-ai:hover:not(:disabled) {
+    opacity: 0.88;
+}
+
+.btn-ai:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.ai-spinner {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ai-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    color: #1e40af;
+    line-height: 1.4;
+}
+
+.ai-note-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.ai-error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    color: #991b1b;
+}
+
 @media (max-width: 600px) {
     .admin-header {
         flex-direction: column;
@@ -675,6 +805,15 @@ tr.inactive {
 
     .modal {
         padding: 24px 18px;
+    }
+
+    .word-input-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-ai {
+        justify-content: center;
     }
 }
 </style>

@@ -522,3 +522,28 @@ def admin_delete_article_word(
     db.delete(row)
     db.commit()
     return Response(status_code=204)
+
+
+class WordLookupRequest(BaseModel):
+    word: str
+
+
+@router.post("/admin/article-words/lookup")
+async def admin_lookup_article_word(
+    body: WordLookupRequest,
+    _admin: models.User = Depends(get_admin_user),
+):
+    """
+    Ask the LLM to suggest article, translation, difficulty and category
+    for a Dutch word. Returns the suggestion without saving anything (admin only).
+    """
+    word = body.word.strip().lower()
+    if not word:
+        raise HTTPException(status_code=400, detail="word cannot be empty")
+    try:
+        from app.llm_service import OpenRouterService
+        result = await OpenRouterService.get_article_word_details(word)
+        return result
+    except Exception as e:
+        logger.error(f"LLM lookup failed for '{word}': {e}")
+        raise HTTPException(status_code=500, detail=f"LLM lookup failed: {e}")
