@@ -638,24 +638,35 @@ Ensure the JSON is properly formatted and valid."""
         difficulty, and category for a given Dutch noun.
 
         Returns a dict with keys: article, translation, difficulty, category, confidence_note.
+        Raises ProcessingError (with a user-friendly message) if the word is not a
+        recognised Dutch noun — callers must NOT persist the result in that case.
         """
         client = OpenRouterService.get_client()
-        prompt = f"""You are a Dutch language expert. Analyse the Dutch noun "{word}" and return ONLY a JSON object with these exact keys:
+        prompt = f"""You are a Dutch language expert. Analyse the input "{word}" and return ONLY a JSON object with these exact keys:
 
-- "article": "de" or "het" (the Dutch definite article for this noun)
-- "translation": the most common English translation (a short word or phrase)
-- "difficulty": one of "easy", "medium", or "hard" based on how well-known the word is for Dutch learners
-- "category": one of these categories — food, nature, animal, object, place, person, body, transport, time, abstract — choose the best fit
-- "confidence_note": a very short note explaining the article choice (1 sentence max)
+- "valid": true if the input is a recognised Dutch noun, false otherwise
+- "article": "de" or "het" (the correct Dutch definite article). Set to null when valid is false.
+- "translation": the most common English translation (a short word or phrase). Set to null when valid is false.
+- "difficulty": one of "easy", "medium", or "hard" (how well-known for learners). Set to null when valid is false.
+- "category": one of — food, nature, animal, object, place, person, body, transport, time, abstract. Set to null when valid is false.
+- "confidence_note": one sentence explaining the article choice, OR the reason it is invalid.
 
 Rules:
+- Set "valid" to false if the input is: not a Dutch word, a verb/adjective/adverb (not a noun), gibberish, a number, or a non-Dutch foreign word.
+- Set "valid" to true only for genuine Dutch nouns (including loanwords used as nouns in Dutch).
 - Use only the grammatical gender of the word itself; do NOT consider compound forms.
-- If the word is not a Dutch noun, still return the JSON but set article to "de" and add a note in confidence_note.
-- Return ONLY the raw JSON object, no markdown fences, no extra text.
+- Return ONLY the raw JSON object — no markdown fences, no extra text.
 
-Example for "appel":
-{{"article":"de","translation":"apple","difficulty":"easy","category":"food","confidence_note":"'appel' is a common de-word (masculine noun)."}}
+Example for "appel" (valid noun):
+{{"valid":true,"article":"de","translation":"apple","difficulty":"easy","category":"food","confidence_note":"'appel' is a common de-word."}}
+
+Example for "lopen" (a verb, not a noun):
+{{"valid":false,"article":null,"translation":null,"difficulty":null,"category":null,"confidence_note":"'lopen' is a verb (to walk), not a Dutch noun."}}
+
+Example for "xqzw" (gibberish):
+{{"valid":false,"article":null,"translation":null,"difficulty":null,"category":null,"confidence_note":"'xqzw' is not a recognised Dutch word."}}
 """
+        content = ""
         try:
             response = await client.post(
                 "/chat/completions",
@@ -676,12 +687,27 @@ Example for "appel":
                 if content.startswith("json"):
                     content = content[4:]
             data = json.loads(content)
-            # Validate / normalise
+
+            # --- Primary validity gate ---
+            # If the LLM says this is not a valid Dutch noun, surface a clear error
+            # immediately — the caller must not persist anything.
+            if not data.get("valid", True):
+                note = data.get("confidence_note") or f"'{word}' is not a recognised Dutch noun."
+                raise ProcessingError(note)
+
+            # Validate required fields for a valid noun response
             if data.get("article") not in ("de", "het"):
-                data["article"] = "de"
+                raise ValueError(f"Invalid article: {data.get('article')!r}")
             if data.get("difficulty") not in ("easy", "medium", "hard"):
-                data["difficulty"] = "medium"
+                raise ValueError(f"Invalid difficulty: {data.get('difficulty')!r}")
+            if not data.get("translation"):
+                raise ValueError("Missing translation")
+
             return data
+
+        except ProcessingError:
+            # Re-raise clean user-facing errors as-is
+            raise
         except Exception as e:
-            logger.error(f"Error fetching article details from LLM for '{word}': {e}")
+            logger.error(f"Error fetching article details from LLM for '{word}': {e}, content: {content!r}")
             raise ProcessingError(f"LLM failed to analyse '{word}': {e}")

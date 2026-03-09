@@ -199,7 +199,7 @@
                     <!-- Preview parsed words -->
                     <div v-if="parsedWords.length" class="parsed-preview">
                         <span class="parsed-count">{{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : ''
-                        }} detected:</span>
+                            }} detected:</span>
                         <span class="parsed-chips">
                             <span v-for="w in parsedWords.slice(0, 30)" :key="w" class="chip">{{ w }}</span>
                             <span v-if="parsedWords.length > 30" class="chip chip-more">+{{ parsedWords.length - 30 }}
@@ -568,7 +568,14 @@ async function autofillWithAI() {
         form.value.category = data.category || form.value.category
         aiNote.value = data.confidence_note || 'Fields filled by AI — please review before saving.'
     } catch (e) {
-        aiError.value = e.response?.data?.detail || 'AI lookup failed. Please fill the fields manually.'
+        const status = e.response?.status
+        const detail = e.response?.data?.detail
+        if (status === 422 && detail) {
+            // Invalid word — the detail IS the explanation from the LLM
+            aiError.value = `⚠️ ${detail}`
+        } else {
+            aiError.value = detail || 'AI lookup failed. Please fill the fields manually.'
+        }
     } finally {
         aiLoading.value = false
     }

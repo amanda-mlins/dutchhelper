@@ -536,14 +536,19 @@ async def admin_lookup_article_word(
     """
     Ask the LLM to suggest article, translation, difficulty and category
     for a Dutch word. Returns the suggestion without saving anything (admin only).
+    Raises 422 if the word is not a recognised Dutch noun.
     """
     word = body.word.strip().lower()
     if not word:
         raise HTTPException(status_code=400, detail="word cannot be empty")
     try:
         from app.llm_service import OpenRouterService
+        from app.exceptions import ProcessingError
         result = await OpenRouterService.get_article_word_details(word)
         return result
+    except ProcessingError as e:
+        # User-facing validation error (not a Dutch noun, gibberish, etc.)
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"LLM lookup failed for '{word}': {e}")
         raise HTTPException(status_code=500, detail=f"LLM lookup failed: {e}")
@@ -619,8 +624,12 @@ async def admin_bulk_import_words(
                     "confidence_note": data.get("confidence_note"),
                 }
             except Exception as e:
-                logger.error(f"Bulk import: LLM failed for '{word}': {e}")
-                return {"word": word, "status": "error", "error": str(e)}
+                from app.exceptions import ProcessingError
+                # For invalid-word errors the message is already user-friendly;
+                # for other errors include the raw detail for debugging.
+                error_msg = str(e) if isinstance(e, ProcessingError) else f"LLM error: {e}"
+                logger.error(f"Bulk import: failed for '{word}': {e}")
+                return {"word": word, "status": "error", "error": error_msg}
 
     llm_results = await asyncio.gather(*[lookup_and_save(w) for w in to_add])
 
