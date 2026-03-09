@@ -19,6 +19,18 @@ def init_db():
     This is kept for SQLite dev convenience and for the test suite.
     """
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
+
+def _run_migrations():
+    """Apply lightweight schema migrations for columns added after initial deploy."""
+    with engine.connect() as conn:
+        # Add category column to user_words if it doesn't exist yet
+        try:
+            conn.execute(text("ALTER TABLE user_words ADD COLUMN category VARCHAR"))
+            conn.commit()
+        except Exception:
+            # Column already exists — ignore
+            pass
 
 def get_db():
     """

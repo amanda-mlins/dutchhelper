@@ -26,9 +26,34 @@
                     <button :class="['mode-tab', { active: setupMode === 'all' }]" @click="setupMode = 'all'">
                         All words <span class="count-badge">{{ allWords.length }}</span>
                     </button>
+                    <button :class="['mode-tab', { active: setupMode === 'category' }]" @click="setupMode = 'category'"
+                        :disabled="!categories.length">
+                        By category <span class="count-badge" :class="{ 'badge-disabled': !categories.length }">{{
+                            categories.length }}</span>
+                    </button>
                     <button :class="['mode-tab', { active: setupMode === 'pick' }]" @click="setupMode = 'pick'">
                         Pick words
                     </button>
+                </div>
+
+                <!-- Category picker -->
+                <div v-if="setupMode === 'category'" class="category-picker">
+                    <div v-if="!categories.length" class="warning-msg">
+                        No categories yet — tag your words in the <router-link to="/word-bank">Word Bank</router-link>.
+                    </div>
+                    <template v-else>
+                        <div class="cat-grid">
+                            <button v-for="cat in categories" :key="cat"
+                                :class="['cat-btn', { active: selectedCategory === cat }]"
+                                @click="selectedCategory = cat">
+                                <span class="cat-name">{{ cat }}</span>
+                                <span class="cat-count">{{ wordsByCategory[cat]?.length || 0 }}</span>
+                            </button>
+                        </div>
+                        <div v-if="!selectedCategory" class="warning-msg">
+                            Pick a category to study.
+                        </div>
+                    </template>
                 </div>
 
                 <!-- Pick-words panel -->
@@ -61,7 +86,8 @@
                     Select at least one word to start.
                 </div>
 
-                <button class="btn-start" :disabled="setupMode === 'pick' && pickedIds.size === 0"
+                <button class="btn-start"
+                    :disabled="(setupMode === 'pick' && pickedIds.size === 0) || (setupMode === 'category' && !selectedCategory)"
                     @click="startSession">
                     Start session ({{ deckSize }} card{{ deckSize !== 1 ? 's' : '' }})
                 </button>
@@ -189,9 +215,11 @@ export default {
             isLoading: false,
             loadError: null,
             allWords: [],
-            setupMode: 'all',        // 'all' | 'pick'
+            setupMode: 'all',        // 'all' | 'category' | 'pick'
             pickedIds: new Set(),
             shuffle: true,
+            categories: [],
+            selectedCategory: '',
 
             // ----- study -----
             deck: [],
@@ -205,8 +233,21 @@ export default {
     },
 
     computed: {
+        wordsByCategory() {
+            const map = {};
+            for (const w of this.allWords) {
+                if (w.category) {
+                    if (!map[w.category]) map[w.category] = [];
+                    map[w.category].push(w);
+                }
+            }
+            return map;
+        },
+
         deckSize() {
-            return this.setupMode === 'all' ? this.allWords.length : this.pickedIds.size;
+            if (this.setupMode === 'all') return this.allWords.length;
+            if (this.setupMode === 'category') return this.selectedCategory ? (this.wordsByCategory[this.selectedCategory]?.length || 0) : 0;
+            return this.pickedIds.size;
         },
 
         currentCard() {
@@ -238,10 +279,14 @@ export default {
             this.isLoading = true;
             this.loadError = null;
             try {
-                const { data } = await authAxios.get('/api/word-bank/words');
-                this.allWords = data;
+                const [wordsRes, catsRes] = await Promise.all([
+                    authAxios.get('/api/word-bank/words'),
+                    authAxios.get('/api/word-bank/categories'),
+                ]);
+                this.allWords = wordsRes.data;
+                this.categories = catsRes.data;
                 // Pre-fill pickedIds with everything for convenience
-                this.pickedIds = new Set(data.map(w => w.id));
+                this.pickedIds = new Set(wordsRes.data.map(w => w.id));
             } catch {
                 this.loadError = 'Failed to load your word bank. Please try again.';
             } finally {
@@ -257,10 +302,14 @@ export default {
         },
 
         buildDeck() {
-            const source =
-                this.setupMode === 'all'
-                    ? [...this.allWords]
-                    : this.allWords.filter(w => this.pickedIds.has(w.id));
+            let source;
+            if (this.setupMode === 'all') {
+                source = [...this.allWords];
+            } else if (this.setupMode === 'category') {
+                source = this.selectedCategory ? [...(this.wordsByCategory[this.selectedCategory] || [])] : [];
+            } else {
+                source = this.allWords.filter(w => this.pickedIds.has(w.id));
+            }
 
             if (this.shuffle) {
                 for (let i = source.length - 1; i > 0; i--) {
@@ -425,6 +474,7 @@ export default {
     gap: 8px;
     justify-content: center;
     margin-bottom: 24px;
+    flex-wrap: wrap;
 }
 
 .mode-tab {
@@ -447,6 +497,11 @@ export default {
     color: #fff;
 }
 
+.mode-tab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .count-badge {
     background: rgba(255, 255, 255, 0.25);
     border-radius: 12px;
@@ -459,6 +514,67 @@ export default {
     background: #f3f4f6;
     color: #555;
 }
+
+.badge-disabled {
+    background: #f3f4f6;
+    color: #aaa;
+}
+
+/* ── Category picker ────────────────────────────────────────────────────── */
+.category-picker {
+    margin-bottom: 20px;
+}
+
+.cat-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.cat-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 15px;
+    color: #374151;
+}
+
+.cat-btn:hover {
+    border-color: #c4b5fd;
+    background: #faf5ff;
+}
+
+.cat-btn.active {
+    border-color: #7c3aed;
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.cat-name {
+    font-weight: 600;
+}
+
+.cat-count {
+    background: #f3f4f6;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.cat-btn.active .cat-count {
+    background: rgba(255, 255, 255, 0.6);
+    color: #5b21b6;
+}
+
 
 /* ── Pick list ──────────────────────────────────────────────────────────── */
 .pick-panel {

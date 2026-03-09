@@ -9,6 +9,9 @@
             <p><strong>Translation:</strong> {{ word.details.translation_en }}</p>
             <p><strong>Example:</strong> <em>{{ word.details.example }}</em></p>
         </div>
+        <div v-if="word.category" class="card-category">
+            <span class="category-chip">🏷️ {{ word.category }}</span>
+        </div>
         <div class="card-footer">
             <button @click="$emit('edit', word)" class="icon-btn edit-btn">
                 <i class="fas fa-pencil-alt"></i>
@@ -73,6 +76,20 @@ export default {
 
 .card-body strong {
     color: #333;
+}
+
+.card-category {
+    padding: 6px 0 0;
+}
+
+.category-chip {
+    display: inline-block;
+    background: #ede9fe;
+    color: #6d28d9;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .card-footer {

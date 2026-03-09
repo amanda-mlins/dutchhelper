@@ -404,6 +404,11 @@ class WordBulkDeleteRequest(BaseModel):
     word_ids: List[int]
 
 
+class WordBulkCategoryRequest(BaseModel):
+    word_ids: List[int]
+    category: Optional[str] = None  # None / "" clears the category
+
+
 @router.post("/word-bank/words", response_model=models.UserWordSchema, status_code=201)
 async def add_user_word(
     word_data: models.UserWordCreate,
@@ -542,6 +547,69 @@ def delete_user_word(
     if not success:
         raise HTTPException(status_code=404, detail="Word not found.")
     return Response(status_code=204)
+
+
+@router.patch("/word-bank/words/{word_id}/category", response_model=models.UserWordSchema)
+def set_word_category(
+    word_id: int,
+    body: models.UserWordCategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Set or clear the category for a single word."""
+    word = (
+        db.query(models.UserWord)
+        .filter(models.UserWord.id == word_id, models.UserWord.user_id == current_user.id)
+        .first()
+    )
+    if not word:
+        raise HTTPException(status_code=404, detail="Word not found.")
+    word.category = body.category or None
+    db.commit()
+    db.refresh(word)
+    return word
+
+
+@router.patch("/word-bank/words/bulk-category", status_code=200)
+def bulk_set_category(
+    body: WordBulkCategoryRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Assign (or clear) a category for multiple words at once."""
+    if not body.word_ids:
+        raise HTTPException(status_code=400, detail="No word IDs provided.")
+    words = (
+        db.query(models.UserWord)
+        .filter(
+            models.UserWord.id.in_(body.word_ids),
+            models.UserWord.user_id == current_user.id,
+        )
+        .all()
+    )
+    for w in words:
+        w.category = body.category or None
+    db.commit()
+    return {"updated": len(words)}
+
+
+@router.get("/word-bank/categories")
+def get_user_categories(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all distinct category values used by the current user's words."""
+    rows = (
+        db.query(models.UserWord.category)
+        .filter(
+            models.UserWord.user_id == current_user.id,
+            models.UserWord.category.isnot(None),
+            models.UserWord.category != "",
+        )
+        .distinct()
+        .all()
+    )
+    return sorted([r[0] for r in rows])
 
 
 # ============================================================================

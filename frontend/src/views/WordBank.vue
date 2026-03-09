@@ -96,7 +96,7 @@
             </div>
         </div>
 
-        <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+        <!-- ── Toolbar ──────────────────────────────────────────────── -->
         <div v-if="words.length" class="toolbar">
             <!-- Select-mode controls -->
             <button v-if="!selectMode" @click="enterSelectMode" class="btn-select-mode">
@@ -104,12 +104,29 @@
             </button>
             <template v-else>
                 <span class="select-count">{{ selectedIds.size }} selected</span>
-                <button @click="selectAll" class="btn-tool" :disabled="selectedIds.size === words.length">
+                <button @click="selectAll" class="btn-tool" :disabled="selectedIds.size === filteredWords.length">
                     Select all
                 </button>
                 <button @click="selectedIds = new Set()" class="btn-tool" :disabled="selectedIds.size === 0">
                     Deselect all
                 </button>
+                <!-- Bulk category assignment -->
+                <div class="bulk-category-wrap">
+                    <input v-model="bulkCategoryValue" class="bulk-category-input" placeholder="Set category…"
+                        list="category-suggestions" :disabled="selectedIds.size === 0 || isBulkCategoring" />
+                    <datalist id="category-suggestions">
+                        <option v-for="c in categories" :key="c" :value="c" />
+                    </datalist>
+                    <button class="btn-tool btn-tag" :disabled="selectedIds.size === 0 || isBulkCategoring"
+                        @click="bulkSetCategory" title="Assign category to selected words">
+                        <span v-if="isBulkCategoring" class="spinner">⟳</span>
+                        <span v-else>🏷️ Tag</span>
+                    </button>
+                    <button class="btn-tool" :disabled="selectedIds.size === 0 || isBulkCategoring"
+                        @click="bulkClearCategory" title="Remove category from selected words">
+                        ✕ Clear tag
+                    </button>
+                </div>
                 <button @click="deleteSelected" class="btn-delete-selected"
                     :disabled="selectedIds.size === 0 || isDeletingSelected">
                     <span v-if="isDeletingSelected" class="spinner">⟳</span>
@@ -120,6 +137,14 @@
 
             <!-- Spacer -->
             <span class="toolbar-spacer"></span>
+
+            <!-- Category filter -->
+            <div v-if="categories.length" class="category-filter">
+                <select v-model="categoryFilter" class="category-select">
+                    <option value="">All categories</option>
+                    <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+                </select>
+            </div>
 
             <!-- View-mode toggle -->
             <div class="view-toggle" title="Switch view">
@@ -141,7 +166,7 @@
 
         <!-- ── Grid view ────────────────────────────────────────────────── -->
         <div v-else-if="viewMode === 'grid'" class="words-grid">
-            <div v-for="word in words" :key="word.id" class="word-card-wrapper"
+            <div v-for="word in filteredWords" :key="word.id" class="word-card-wrapper"
                 :class="{ 'card-selected': selectedIds.has(word.id) }"
                 @click="selectMode ? toggleSelect(word.id) : null">
                 <div v-if="selectMode" class="card-checkbox">
@@ -159,19 +184,22 @@
                 <thead>
                     <tr>
                         <th v-if="selectMode" class="col-check">
-                            <input type="checkbox" :checked="selectedIds.size === words.length && words.length > 0"
-                                @change="selectedIds.size === words.length ? selectedIds = new Set() : selectAll()"
+                            <input type="checkbox"
+                                :checked="selectedIds.size === filteredWords.length && filteredWords.length > 0"
+                                @change="selectedIds.size === filteredWords.length ? selectedIds = new Set() : selectAll()"
                                 title="Select / deselect all" />
                         </th>
                         <th class="col-word">Word</th>
                         <th class="col-type">Type</th>
                         <th class="col-trans">Translation</th>
+                        <th class="col-cat">Category</th>
                         <th class="col-def">Definition</th>
                         <th v-if="!selectMode" class="col-actions"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="word in words" :key="word.id" :class="{ 'row-selected': selectedIds.has(word.id) }"
+                    <tr v-for="word in filteredWords" :key="word.id"
+                        :class="{ 'row-selected': selectedIds.has(word.id) }"
                         @click="selectMode ? toggleSelect(word.id) : null" :style="selectMode ? 'cursor: pointer' : ''">
                         <td v-if="selectMode" class="col-check" @click.stop>
                             <input type="checkbox" :checked="selectedIds.has(word.id)"
@@ -182,6 +210,21 @@
                             <span class="word-type-badge">{{ word.word_type }}</span>
                         </td>
                         <td class="col-trans">{{ word.details?.translation_en || '—' }}</td>
+                        <td class="col-cat" @click.stop>
+                            <!-- Inline category edit -->
+                            <template v-if="editingCategoryId === word.id">
+                                <input class="inline-cat-input" v-model="editingCategoryValue"
+                                    list="category-suggestions" placeholder="Category…"
+                                    @keyup.enter="saveCategoryInline(word)" @keyup.escape="cancelCategoryInline"
+                                    @blur="saveCategoryInline(word)" ref="catInput" />
+                            </template>
+                            <template v-else>
+                                <span v-if="word.category" class="cat-chip" @click="startCategoryInline(word)"
+                                    title="Click to edit">{{ word.category }}</span>
+                                <button v-else class="add-cat-btn" @click="startCategoryInline(word)"
+                                    title="Add category">+ tag</button>
+                            </template>
+                        </td>
                         <td class="col-def list-def">{{ word.details?.definition || '—' }}</td>
                         <td v-if="!selectMode" class="col-actions" @click.stop>
                             <button @click="openEditModal(word)" class="list-action-btn edit" title="Edit">✏️</button>
@@ -237,6 +280,14 @@ export default {
 
             // View mode
             viewMode: 'grid',   // 'grid' | 'list'
+
+            // Category
+            categories: [],
+            categoryFilter: '',
+            editingCategoryId: null,
+            editingCategoryValue: '',
+            bulkCategoryValue: '',
+            isBulkCategoring: false,
         };
     },
     computed: {
@@ -252,14 +303,22 @@ export default {
         bulkProgressPct() {
             return this.bulkTotal ? Math.round((this.bulkDone / this.bulkTotal) * 100) : 0;
         },
+        filteredWords() {
+            if (!this.categoryFilter) return this.words;
+            return this.words.filter(w => w.category === this.categoryFilter);
+        },
     },
     methods: {
         async fetchWords() {
             this.isLoading = true;
             this.error = null;
             try {
-                const response = await authAxios.get('/api/word-bank/words');
-                this.words = response.data;
+                const [wordsRes, catsRes] = await Promise.all([
+                    authAxios.get('/api/word-bank/words'),
+                    authAxios.get('/api/word-bank/categories'),
+                ]);
+                this.words = wordsRes.data;
+                this.categories = catsRes.data;
             } catch (err) {
                 this.error = 'Failed to load words. Please try again later.';
                 console.error(err);
@@ -360,7 +419,6 @@ export default {
             }
         },
 
-        // ── Multi-select delete ─────────────────────────────────────────
         enterSelectMode() {
             this.selectMode = true;
             this.selectedIds = new Set();
@@ -368,6 +426,7 @@ export default {
         exitSelectMode() {
             this.selectMode = false;
             this.selectedIds = new Set();
+            this.bulkCategoryValue = '';
         },
         toggleSelect(wordId) {
             const next = new Set(this.selectedIds);
@@ -376,7 +435,7 @@ export default {
             this.selectedIds = next;
         },
         selectAll() {
-            this.selectedIds = new Set(this.words.map(w => w.id));
+            this.selectedIds = new Set(this.filteredWords.map(w => w.id));
         },
         async deleteSelected() {
             const ids = [...this.selectedIds];
@@ -393,6 +452,64 @@ export default {
                 console.error(err);
             } finally {
                 this.isDeletingSelected = false;
+            }
+        },
+
+        // ── Category (inline, single) ───────────────────────────────────
+        startCategoryInline(word) {
+            this.editingCategoryId = word.id;
+            this.editingCategoryValue = word.category || '';
+            this.$nextTick(() => {
+                const el = this.$refs.catInput;
+                if (el) (Array.isArray(el) ? el[0] : el).focus();
+            });
+        },
+        cancelCategoryInline() {
+            this.editingCategoryId = null;
+            this.editingCategoryValue = '';
+        },
+        async saveCategoryInline(word) {
+            if (this.editingCategoryId !== word.id) return;
+            const newCat = this.editingCategoryValue.trim() || null;
+            this.editingCategoryId = null;
+            this.editingCategoryValue = '';
+            if (newCat === (word.category || null)) return; // no change
+            try {
+                await authAxios.patch(`/api/word-bank/words/${word.id}/category`, { category: newCat });
+                await this.fetchWords();
+            } catch (err) {
+                console.error('Failed to update category', err);
+            }
+        },
+
+        // ── Category (bulk) ─────────────────────────────────────────────
+        async bulkSetCategory() {
+            const ids = [...this.selectedIds];
+            if (!ids.length) return;
+            const cat = this.bulkCategoryValue.trim() || null;
+            this.isBulkCategoring = true;
+            try {
+                await authAxios.patch('/api/word-bank/words/bulk-category', { word_ids: ids, category: cat });
+                await this.fetchWords();
+            } catch (err) {
+                alert('Failed to set category. Please try again.');
+                console.error(err);
+            } finally {
+                this.isBulkCategoring = false;
+            }
+        },
+        async bulkClearCategory() {
+            const ids = [...this.selectedIds];
+            if (!ids.length) return;
+            this.isBulkCategoring = true;
+            try {
+                await authAxios.patch('/api/word-bank/words/bulk-category', { word_ids: ids, category: null });
+                await this.fetchWords();
+            } catch (err) {
+                alert('Failed to clear category. Please try again.');
+                console.error(err);
+            } finally {
+                this.isBulkCategoring = false;
             }
         },
     },
@@ -708,6 +825,96 @@ export default {
 .btn-primary:disabled {
     background: #aaa;
     cursor: not-allowed;
+}
+
+.col-cat {
+    width: 130px;
+}
+
+.cat-chip {
+    display: inline-block;
+    background: #ede9fe;
+    color: #6d28d9;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.cat-chip:hover {
+    background: #ddd6fe;
+}
+
+.add-cat-btn {
+    background: none;
+    border: 1px dashed #d1d5db;
+    color: #9ca3af;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.add-cat-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.inline-cat-input {
+    width: 110px;
+    padding: 2px 7px;
+    border: 1px solid #667eea;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+}
+
+/* ── Category filter & bulk tag ─────────────────────────────────────────── */
+.category-filter {
+    display: flex;
+    align-items: center;
+}
+
+.category-select {
+    padding: 7px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+}
+
+.bulk-category-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.bulk-category-input {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    width: 140px;
+}
+
+.bulk-category-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.btn-tag {
+    background: #ede9fe;
+    color: #6d28d9;
+    border-color: #c4b5fd;
+}
+
+.btn-tag:not(:disabled):hover {
+    background: #ddd6fe;
 }
 
 /* ── Toolbar ────────────────────────────────────────────────────────────── */

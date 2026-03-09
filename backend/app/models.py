@@ -66,6 +66,7 @@ class UserWord(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     word = Column(String, index=True, nullable=False)
     word_type = Column(String, index=True) # E.g., 'noun', 'verb', 'adjective'
+    category = Column(String, index=True, nullable=True)  # User-defined category tag
     
     # Storing dictionary-like data as a JSON string
     details = Column(Text) # JSON string: {definition: "", translation_en: "", example: ""}
@@ -105,10 +106,14 @@ class UserWordBase(BaseModel):
 class UserWordCreate(UserWordBase):
     pass
 
+class UserWordCategoryUpdate(BaseModel):
+    category: Optional[str] = None
+
 class UserWordSchema(UserWordBase):
     id: int
     user_id: int
     word_type: str
+    category: Optional[str] = None
     details: Any
     created_at: datetime
     last_practiced_at: Optional[datetime] = None
