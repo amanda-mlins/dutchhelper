@@ -29,6 +29,10 @@
                         @click="closeMenu">
                         Word Bank<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                     </router-link>
+                    <router-link to="/flashcards" class="nav-link" :class="{ locked: !auth.isAuthenticated }"
+                        @click="closeMenu">
+                        Flashcards<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
+                    </router-link>
                     <!-- Admin dropdown (desktop: click; mobile: inline expand) -->
                     <div v-if="auth.user?.is_admin" class="admin-dropdown" :class="{ open: adminOpen }" @click.stop>
                         <button class="nav-link nav-admin admin-toggle" @click="toggleAdmin">

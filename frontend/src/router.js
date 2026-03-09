@@ -5,6 +5,7 @@ import Conjugator from './views/Conjugator.vue'
 import ArticleGame from './views/ArticleGame.vue'
 import ArticleGameStats from './views/ArticleGameStats.vue'
 import WordBank from './views/WordBank.vue'
+import Flashcards from './views/Flashcards.vue'
 import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import AuthCallback from './views/AuthCallback.vue'
@@ -72,6 +73,11 @@ const routes = [
     path: '/word-bank',
     name: 'WordBank',
     component: WordBank
+  },
+  {
+    path: '/flashcards',
+    name: 'Flashcards',
+    component: Flashcards
   },
 
   // ── Admin routes (require is_admin) ───────────────────────────────────────

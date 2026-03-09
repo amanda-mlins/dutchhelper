@@ -60,6 +60,17 @@
             <p>Create your own personal dictionary. Save words, review definitions, and practice with flashcards.</p>
           </component>
 
+          <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
+            v-bind="auth.isAuthenticated ? { to: '/flashcards' } : {}" class="tool-card"
+            :class="{ 'tool-card--locked': !auth.isAuthenticated }">
+            <div class="card-header">
+              <h3>🃏 Flashcards</h3>
+              <span v-if="!auth.isAuthenticated" class="lock-badge">🔒 Login required</span>
+            </div>
+            <p>Practise your saved words with flipping flashcards. Study all words or hand-pick a set, track what you
+              know and what still needs work.</p>
+          </component>
+
         </div>
       </section>
     </main>
