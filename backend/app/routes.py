@@ -396,6 +396,14 @@ def api_get_game_history(
 
 # --- Word Bank API Endpoints (require authentication) ---
 
+class WordBulkAddRequest(BaseModel):
+    words: List[str]
+
+
+class WordBulkDeleteRequest(BaseModel):
+    word_ids: List[int]
+
+
 @router.post("/word-bank/words", response_model=models.UserWordSchema, status_code=201)
 async def add_user_word(
     word_data: models.UserWordCreate,
@@ -414,6 +422,89 @@ async def add_user_word(
     except Exception as e:
         logger.error(f"Error adding word '{word_data.word}': {e}")
         raise HTTPException(status_code=500, detail="Failed to add word. Please try again.")
+
+
+@router.post("/word-bank/words/bulk")
+async def bulk_add_user_words(
+    body: WordBulkAddRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Bulk-add a list of Dutch words to the authenticated user's word bank.
+
+    Each word is validated via the LLM. Already-saved words are skipped.
+    Up to 3 LLM calls run concurrently.
+
+    Returns per-word results:
+      { word, status: "added"|"skipped"|"error", error? }
+    """
+    import asyncio
+    from app.exceptions import ProcessingError
+
+    clean_words = list({w.strip().lower() for w in body.words if w.strip()})
+    if not clean_words:
+        raise HTTPException(status_code=400, detail="No valid words provided.")
+    if len(clean_words) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 words per import.")
+
+    service = WordListService(db)
+    semaphore = asyncio.Semaphore(3)
+
+    async def add_one(word: str) -> dict:
+        async with semaphore:
+            try:
+                await service.add_word(word=word, user_id=current_user.id)
+                return {"word": word, "status": "added"}
+            except ProcessingError as e:
+                return {"word": word, "status": "error", "error": str(e)}
+            except Exception as e:
+                logger.error(f"Bulk word-bank add: failed for '{word}': {e}")
+                return {"word": word, "status": "error", "error": "Failed to add word."}
+
+    results = await asyncio.gather(*[add_one(w) for w in clean_words])
+
+    # Restore original order
+    word_order = {w: i for i, w in enumerate(clean_words)}
+    results = sorted(results, key=lambda r: word_order.get(r["word"], 999))
+
+    added = sum(1 for r in results if r["status"] == "added")
+    errors = sum(1 for r in results if r["status"] == "error")
+
+    return {
+        "summary": {"added": added, "errors": errors, "total": len(results)},
+        "results": results,
+    }
+
+
+@router.delete("/word-bank/words/bulk", status_code=200)
+def bulk_delete_user_words(
+    body: WordBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Delete multiple words from the authenticated user's word bank in one request.
+
+    Only deletes words owned by the current user (ignores IDs that don't belong).
+    Returns { deleted: N }.
+    """
+    if not body.word_ids:
+        raise HTTPException(status_code=400, detail="No word IDs provided.")
+
+    to_delete = (
+        db.query(models.UserWord)
+        .filter(
+            models.UserWord.id.in_(body.word_ids),
+            models.UserWord.user_id == current_user.id,
+        )
+        .all()
+    )
+    for word in to_delete:
+        db.delete(word)
+    db.commit()
+    return {"deleted": len(to_delete)}
+
 
 @router.get("/word-bank/words", response_model=List[models.UserWordSchema])
 def get_user_words(

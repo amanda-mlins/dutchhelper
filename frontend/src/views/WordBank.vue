@@ -4,7 +4,10 @@
             <h2>My Word Bank</h2>
             <p>Your personal collection of Dutch words.</p>
         </header>
+
+        <!-- ── Add word section ─────────────────────────────────────────── -->
         <div class="add-word-section">
+            <!-- Single word -->
             <div class="add-word-form">
                 <input v-model="newWord" type="text" placeholder="Enter a Dutch word…" class="add-word-input"
                     @keyup.enter="addWord" :disabled="isAdding" />
@@ -13,14 +16,121 @@
                     <i v-else class="fas fa-plus"></i>
                     {{ isAdding ? 'Looking up…' : 'Add Word' }}
                 </button>
+                <button @click="showBulkPanel = !showBulkPanel" class="bulk-toggle-btn"
+                    :class="{ active: showBulkPanel }" title="Add multiple words at once">
+                    📋 Bulk add
+                </button>
             </div>
+
             <div v-if="addError" class="add-feedback add-feedback--error">
                 <span class="feedback-icon">⚠️</span> {{ addError }}
             </div>
             <div v-if="addSuccess" class="add-feedback add-feedback--success">
                 <span class="feedback-icon">✅</span> <strong>{{ addSuccess }}</strong> added to your word bank!
             </div>
+
+            <!-- Bulk add panel -->
+            <div v-if="showBulkPanel" class="bulk-panel">
+                <p class="bulk-desc">
+                    Paste words separated by commas, semicolons, or new lines. The AI will look up each one.
+                </p>
+                <textarea v-model="bulkPasteText" class="bulk-textarea"
+                    placeholder="appel, boom, auto, huis, fiets&#10;(one word per line or comma-separated)" rows="4"
+                    :disabled="bulkStep === 'progress'" />
+
+                <div v-if="parsedWords.length" class="parsed-preview">
+                    <span class="parsed-count">{{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : '' }}
+                        detected:</span>
+                    <span class="parsed-chips">
+                        <span v-for="w in parsedWords.slice(0, 20)" :key="w" class="chip">{{ w }}</span>
+                        <span v-if="parsedWords.length > 20" class="chip chip-more">+{{ parsedWords.length - 20 }}
+                            more</span>
+                    </span>
+                </div>
+
+                <!-- Progress table -->
+                <div v-if="bulkStep === 'progress'" class="bulk-progress-section">
+                    <div class="bulk-progress-bar-wrap">
+                        <div class="bulk-progress-bar" :style="{ width: bulkProgressPct + '%' }"></div>
+                    </div>
+                    <p class="bulk-progress-label">{{ bulkDone }} / {{ bulkTotal }} processed</p>
+
+                    <div class="bulk-result-table-wrap">
+                        <table class="bulk-result-table">
+                            <thead>
+                                <tr>
+                                    <th>Word</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="r in bulkResults" :key="r.word" :class="'row-' + r.status">
+                                    <td class="word-cell">{{ r.word }}</td>
+                                    <td>
+                                        <span v-if="r.status === 'pending'" class="status-pending">⏳ Waiting…</span>
+                                        <span v-else-if="r.status === 'added'" class="status-added">✅ Added</span>
+                                        <span v-else-if="r.status === 'error'" class="status-error" :title="r.error">⚠️
+                                            {{ r.error }}</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div v-if="bulkDone === bulkTotal && bulkTotal > 0" class="bulk-summary">
+                        <span class="sum-added">✅ {{ bulkSummary.added }} added</span>
+                        <span v-if="bulkSummary.errors" class="sum-error">⚠️ {{ bulkSummary.errors }} errors</span>
+                    </div>
+                </div>
+
+                <div class="bulk-actions">
+                    <button class="btn-secondary" @click="closeBulkPanel">Cancel</button>
+                    <button class="btn-primary"
+                        :disabled="!parsedWords.length || bulkStep === 'progress' && bulkDone < bulkTotal"
+                        @click="bulkStep === 'progress' && bulkDone === bulkTotal ? resetBulk() : startBulkImport()">
+                        <span v-if="bulkStep === 'progress' && bulkDone < bulkTotal">Processing…</span>
+                        <span v-else-if="bulkStep === 'progress' && bulkDone === bulkTotal">✅ Done — Add more</span>
+                        <span v-else>✨ Add {{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : '' }}</span>
+                    </button>
+                </div>
+            </div>
         </div>
+
+        <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+        <div v-if="words.length" class="toolbar">
+            <!-- Select-mode controls -->
+            <button v-if="!selectMode" @click="enterSelectMode" class="btn-select-mode">
+                ☑️ Select words
+            </button>
+            <template v-else>
+                <span class="select-count">{{ selectedIds.size }} selected</span>
+                <button @click="selectAll" class="btn-tool" :disabled="selectedIds.size === words.length">
+                    Select all
+                </button>
+                <button @click="selectedIds = new Set()" class="btn-tool" :disabled="selectedIds.size === 0">
+                    Deselect all
+                </button>
+                <button @click="deleteSelected" class="btn-delete-selected"
+                    :disabled="selectedIds.size === 0 || isDeletingSelected">
+                    <span v-if="isDeletingSelected" class="spinner">⟳</span>
+                    🗑️ Delete selected ({{ selectedIds.size }})
+                </button>
+                <button @click="exitSelectMode" class="btn-tool">Cancel</button>
+            </template>
+
+            <!-- Spacer -->
+            <span class="toolbar-spacer"></span>
+
+            <!-- View-mode toggle -->
+            <div class="view-toggle" title="Switch view">
+                <button @click="viewMode = 'grid'" :class="['view-btn', { active: viewMode === 'grid' }]"
+                    title="Grid view">⊞</button>
+                <button @click="viewMode = 'list'" :class="['view-btn', { active: viewMode === 'list' }]"
+                    title="List view">☰</button>
+            </div>
+        </div>
+
+        <!-- ── Loading / error ──────────────────────────────────────────── -->
         <div v-if="isLoading" class="loading-indicator">
             <p>Loading words...</p>
         </div>
@@ -29,11 +139,59 @@
             <p>{{ error }}</p>
         </div>
 
-        <div v-else class="words-grid">
-            <WordCard v-for="word in words" :key="word.id" :word="word" @edit="openEditModal" @delete="deleteWord" />
+        <!-- ── Grid view ────────────────────────────────────────────────── -->
+        <div v-else-if="viewMode === 'grid'" class="words-grid">
+            <div v-for="word in words" :key="word.id" class="word-card-wrapper"
+                :class="{ 'card-selected': selectedIds.has(word.id) }"
+                @click="selectMode ? toggleSelect(word.id) : null">
+                <div v-if="selectMode" class="card-checkbox">
+                    <input type="checkbox" :checked="selectedIds.has(word.id)" @change="toggleSelect(word.id)"
+                        @click.stop />
+                </div>
+                <WordCard :word="word" @edit="selectMode ? null : openEditModal(word)"
+                    @delete="selectMode ? null : deleteWord(word.id)" />
+            </div>
         </div>
 
-
+        <!-- ── List view ────────────────────────────────────────────────── -->
+        <div v-else class="words-list-wrap">
+            <table class="words-list">
+                <thead>
+                    <tr>
+                        <th v-if="selectMode" class="col-check">
+                            <input type="checkbox" :checked="selectedIds.size === words.length && words.length > 0"
+                                @change="selectedIds.size === words.length ? selectedIds = new Set() : selectAll()"
+                                title="Select / deselect all" />
+                        </th>
+                        <th class="col-word">Word</th>
+                        <th class="col-type">Type</th>
+                        <th class="col-trans">Translation</th>
+                        <th class="col-def">Definition</th>
+                        <th v-if="!selectMode" class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="word in words" :key="word.id" :class="{ 'row-selected': selectedIds.has(word.id) }"
+                        @click="selectMode ? toggleSelect(word.id) : null" :style="selectMode ? 'cursor: pointer' : ''">
+                        <td v-if="selectMode" class="col-check" @click.stop>
+                            <input type="checkbox" :checked="selectedIds.has(word.id)"
+                                @change="toggleSelect(word.id)" />
+                        </td>
+                        <td class="col-word list-word">{{ word.word }}</td>
+                        <td class="col-type">
+                            <span class="word-type-badge">{{ word.word_type }}</span>
+                        </td>
+                        <td class="col-trans">{{ word.details?.translation_en || '—' }}</td>
+                        <td class="col-def list-def">{{ word.details?.definition || '—' }}</td>
+                        <td v-if="!selectMode" class="col-actions" @click.stop>
+                            <button @click="openEditModal(word)" class="list-action-btn edit" title="Edit">✏️</button>
+                            <button @click="deleteWord(word.id)" class="list-action-btn delete"
+                                title="Delete">🗑️</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <EditWordModal :is-open="isEditModalOpen" :word-to-edit="wordToEdit" @close="closeEditModal"
             @word-saved="fetchWords" />
@@ -62,7 +220,38 @@ export default {
             error: null,
             isEditModalOpen: false,
             wordToEdit: null,
+
+            // Bulk add
+            showBulkPanel: false,
+            bulkPasteText: '',
+            bulkStep: 'input',       // 'input' | 'progress'
+            bulkResults: [],
+            bulkSummary: { added: 0, errors: 0 },
+            bulkTotal: 0,
+            bulkDone: 0,
+
+            // Multi-select delete
+            selectMode: false,
+            selectedIds: new Set(),
+            isDeletingSelected: false,
+
+            // View mode
+            viewMode: 'grid',   // 'grid' | 'list'
         };
+    },
+    computed: {
+        parsedWords() {
+            const raw = this.bulkPasteText;
+            if (!raw.trim()) return [];
+            return [...new Set(
+                raw.split(/[\n\r,;]+/)
+                    .map(w => w.trim().toLowerCase())
+                    .filter(w => w.length > 0)
+            )];
+        },
+        bulkProgressPct() {
+            return this.bulkTotal ? Math.round((this.bulkDone / this.bulkTotal) * 100) : 0;
+        },
     },
     methods: {
         async fetchWords() {
@@ -78,6 +267,7 @@ export default {
                 this.isLoading = false;
             }
         },
+
         async addWord() {
             if (!this.newWord.trim()) return;
             this.isAdding = true;
@@ -93,7 +283,6 @@ export default {
                 const status = err.response?.status;
                 const detail = err.response?.data?.detail;
                 if (status === 422 && detail) {
-                    // LLM validation rejection — show the explanation directly
                     this.addError = detail;
                 } else if (status === 409) {
                     this.addError = `'${word}' is already in your word bank.`;
@@ -105,6 +294,52 @@ export default {
                 this.isAdding = false;
             }
         },
+
+        // ── Bulk add ────────────────────────────────────────────────────
+        closeBulkPanel() {
+            this.showBulkPanel = false;
+            this.resetBulk();
+        },
+        resetBulk() {
+            this.bulkPasteText = '';
+            this.bulkStep = 'input';
+            this.bulkResults = [];
+            this.bulkSummary = { added: 0, errors: 0 };
+            this.bulkTotal = 0;
+            this.bulkDone = 0;
+        },
+        async startBulkImport() {
+            const wordList = this.parsedWords;
+            if (!wordList.length) return;
+            if (wordList.length > 100) {
+                alert('Maximum 100 words per import. Please split into smaller batches.');
+                return;
+            }
+
+            this.bulkTotal = wordList.length;
+            this.bulkDone = 0;
+            this.bulkResults = wordList.map(w => ({ word: w, status: 'pending' }));
+            this.bulkStep = 'progress';
+
+            try {
+                const { data } = await authAxios.post('/api/word-bank/words/bulk', { words: wordList });
+                const resultMap = Object.fromEntries(data.results.map(r => [r.word, r]));
+                this.bulkResults = this.bulkResults.map(r => resultMap[r.word] ?? r);
+                this.bulkDone = this.bulkTotal;
+                this.bulkSummary = data.summary;
+                await this.fetchWords();
+            } catch (err) {
+                this.bulkResults = this.bulkResults.map(r =>
+                    r.status === 'pending'
+                        ? { ...r, status: 'error', error: err.response?.data?.detail || 'Request failed' }
+                        : r
+                );
+                this.bulkDone = this.bulkTotal;
+                this.bulkSummary = { added: 0, errors: this.bulkTotal };
+            }
+        },
+
+        // ── Edit / single delete ────────────────────────────────────────
         openEditModal(word) {
             this.wordToEdit = { ...word };
             this.isEditModalOpen = true;
@@ -122,6 +357,42 @@ export default {
                     alert('Failed to delete word.');
                     console.error(err);
                 }
+            }
+        },
+
+        // ── Multi-select delete ─────────────────────────────────────────
+        enterSelectMode() {
+            this.selectMode = true;
+            this.selectedIds = new Set();
+        },
+        exitSelectMode() {
+            this.selectMode = false;
+            this.selectedIds = new Set();
+        },
+        toggleSelect(wordId) {
+            const next = new Set(this.selectedIds);
+            if (next.has(wordId)) next.delete(wordId);
+            else next.add(wordId);
+            this.selectedIds = next;
+        },
+        selectAll() {
+            this.selectedIds = new Set(this.words.map(w => w.id));
+        },
+        async deleteSelected() {
+            const ids = [...this.selectedIds];
+            if (!ids.length) return;
+            if (!confirm(`Delete ${ids.length} word${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+            this.isDeletingSelected = true;
+            try {
+                await authAxios.delete('/api/word-bank/words/bulk', { data: { word_ids: ids } });
+                this.exitSelectMode();
+                await this.fetchWords();
+            } catch (err) {
+                alert('Failed to delete some words. Please try again.');
+                console.error(err);
+            } finally {
+                this.isDeletingSelected = false;
             }
         },
     },
@@ -154,9 +425,10 @@ export default {
     margin-bottom: 20px;
 }
 
+/* ── Add word section ───────────────────────────────────────────────────── */
 .add-word-section {
     margin-bottom: 40px;
-    max-width: 600px;
+    max-width: 700px;
     margin-left: auto;
     margin-right: auto;
 }
@@ -165,10 +437,12 @@ export default {
     display: flex;
     gap: 10px;
     padding: 10px;
+    flex-wrap: wrap;
 }
 
 .add-word-input {
     flex-grow: 1;
+    min-width: 160px;
     padding: 12px;
     border: 1px solid #ccc;
     border-radius: 8px;
@@ -198,6 +472,24 @@ export default {
     cursor: not-allowed;
 }
 
+.bulk-toggle-btn {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
+}
+
+.bulk-toggle-btn:hover,
+.bulk-toggle-btn.active {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+}
+
 .add-feedback {
     display: flex;
     align-items: flex-start;
@@ -207,6 +499,8 @@ export default {
     font-size: 0.9rem;
     line-height: 1.4;
     margin-top: 10px;
+    margin-left: 10px;
+    margin-right: 10px;
 }
 
 .add-feedback--error {
@@ -225,6 +519,444 @@ export default {
     flex-shrink: 0;
 }
 
+/* ── Bulk panel ─────────────────────────────────────────────────────────── */
+.bulk-panel {
+    margin: 12px 10px 0;
+    padding: 20px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+}
+
+.bulk-desc {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+}
+
+.bulk-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.bulk-textarea:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+}
+
+.parsed-preview {
+    margin-top: 10px;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.parsed-count {
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.parsed-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.chip {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.8rem;
+}
+
+.chip-more {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.bulk-progress-section {
+    margin-top: 16px;
+}
+
+.bulk-progress-bar-wrap {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.bulk-progress-bar {
+    height: 100%;
+    background: #667eea;
+    border-radius: 999px;
+    transition: width 0.3s;
+}
+
+.bulk-progress-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin: 6px 0 10px;
+}
+
+.bulk-result-table-wrap {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.bulk-result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.bulk-result-table th {
+    background: #f3f4f6;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    position: sticky;
+    top: 0;
+}
+
+.bulk-result-table td {
+    padding: 7px 12px;
+    border-top: 1px solid #f3f4f6;
+}
+
+.row-added {
+    background: #f0fdf4;
+}
+
+.row-error {
+    background: #fff7f7;
+}
+
+.status-pending {
+    color: #9ca3af;
+}
+
+.status-added {
+    color: #166534;
+    font-weight: 600;
+}
+
+.status-error {
+    color: #991b1b;
+}
+
+.bulk-summary {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.sum-added {
+    color: #166534;
+}
+
+.sum-error {
+    color: #991b1b;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 14px;
+}
+
+.btn-secondary {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+.btn-primary {
+    background: #667eea;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover {
+    background: #5a6edc;
+}
+
+.btn-primary:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.btn-select-mode {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-select-mode:hover {
+    background: #e5e7eb;
+}
+
+.select-count {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.9rem;
+}
+
+.btn-tool {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn-tool:disabled {
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.btn-tool:not(:disabled):hover {
+    background: #e5e7eb;
+}
+
+.btn-delete-selected {
+    background: #ef4444;
+    border: none;
+    color: white;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+}
+
+.btn-delete-selected:hover:not(:disabled) {
+    background: #dc2626;
+}
+
+.btn-delete-selected:disabled {
+    background: #fca5a5;
+    cursor: not-allowed;
+}
+
+.toolbar-spacer {
+    flex: 1;
+}
+
+/* ── View toggle ────────────────────────────────────────────────────────── */
+.view-toggle {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.view-btn {
+    background: #f3f4f6;
+    border: none;
+    padding: 7px 13px;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+    transition: background 0.15s, color 0.15s;
+}
+
+.view-btn:first-child {
+    border-right: 1px solid #d1d5db;
+}
+
+.view-btn:hover {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.view-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+/* ── Word grid ──────────────────────────────────────────────────────────── */
+.words-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.word-card-wrapper {
+    position: relative;
+    border-radius: 12px;
+    transition: box-shadow 0.15s;
+}
+
+.word-card-wrapper.card-selected {
+    box-shadow: 0 0 0 3px #667eea;
+}
+
+.card-checkbox {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+}
+
+.card-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #667eea;
+}
+
+/* Clicking a card in select mode feels natural */
+.word-card-wrapper[style*="cursor"] {
+    cursor: pointer;
+}
+
+/* ── List view ──────────────────────────────────────────────────────────── */
+.words-list-wrap {
+    overflow-x: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+}
+
+.words-list {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.words-list thead {
+    background: #f9fafb;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.words-list th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+.words-list td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+    vertical-align: middle;
+}
+
+.words-list tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.words-list tbody tr:hover {
+    background: #f9fafb;
+}
+
+.row-selected,
+.row-selected:hover {
+    background: #eef2ff !important;
+}
+
+.col-check  { width: 36px; }
+.col-word   { min-width: 110px; }
+.col-type   { width: 90px; }
+.col-trans  { min-width: 120px; }
+.col-def    { min-width: 160px; }
+.col-actions { width: 80px; }
+
+.list-word {
+    font-weight: 700;
+    color: #667eea;
+}
+
+.list-def {
+    color: #6b7280;
+    font-size: 0.85rem;
+    max-width: 340px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.word-type-badge {
+    background: #f0f0f0;
+    color: #555;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.col-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.list-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    line-height: 1;
+    transition: background 0.15s;
+}
+
+.list-action-btn.edit:hover  { background: #e0e7ff; }
+.list-action-btn.delete:hover { background: #fee2e2; }
+
+/* ── Misc ───────────────────────────────────────────────────────────────── */
 .spinner {
     display: inline-block;
     animation: spin 1s linear infinite;
@@ -240,15 +972,14 @@ export default {
     }
 }
 
+.loading-indicator,
 .error-message {
-    color: #e74c3c;
     text-align: center;
+    color: #e74c3c;
     margin-top: 10px;
 }
 
-.words-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
+.loading-indicator {
+    color: #6b7280;
 }
 </style>
