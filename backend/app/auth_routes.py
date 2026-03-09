@@ -16,10 +16,12 @@ Security notes:
 - Rate limiting on sensitive endpoints is handled by slowapi (configured in main.py).
 """
 import logging
+import re
 from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
+from better_profanity import profanity as _profanity
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -29,7 +31,8 @@ from app import models
 from app.auth_service import (
     authenticate_user,
     create_access_token,
-    create_refresh_token,    create_or_update_google_user,
+    create_refresh_token,
+    create_or_update_google_user,
     create_user_with_password,
     get_current_user,
     get_current_user_from_refresh_cookie,
@@ -38,6 +41,35 @@ from app.auth_service import (
 from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
+
+# ---------------------------------------------------------------------------
+# Profanity filter — initialised once at import time.
+# Load the default word list and extend it with common leet-speak / short
+# offensive terms that the stock list sometimes misses.
+# ---------------------------------------------------------------------------
+_EXTRA_BANNED = [
+    "slut", "whore", "cunt", "fag", "nigga", "nigger", "chink", "spic",
+    "kike", "tranny", "retard", "rapist", "pedo", "paedo", "molest",
+    "adolf", "hitler", "nazi", "kkk", "rape", "kill yourself", "kys",
+    "fcker", "fucker", "fck",
+]
+
+# Words to block even when embedded inside a longer string
+# (e.g. "Hitler2024", "n_zi", "iLoveAss"). Checked against the
+# separator-stripped, lower-cased nickname via a simple `in` test.
+_SUBSTRING_BANNED = [
+    "hitler", "adolf", "nazi", "nzi", "nigger", "nigga", "chink", "spic",
+    "kike", "rapist", "paedo", "paedoph", "pedoph", "slut", "whore",
+    "cunt", "fck", "fucker",
+]
+
+_profanity.load_censor_words(whitelist_words=[])
+_profanity.add_censor_words(_EXTRA_BANNED)
+
+
+def _spaced_camel(s: str) -> str:
+    """Insert spaces before uppercase letters so 'iLoveAss' → 'i Love Ass'."""
+    return re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +170,6 @@ def update_me(
     current_user: models.User = Depends(get_current_user),
 ):
     """Update the current user's profile (nickname). Requires authentication."""
-    import re
-
     if body.username is not None:
         nickname = body.username.strip()
 
@@ -155,6 +185,24 @@ def update_me(
                 raise HTTPException(
                     status_code=422,
                     detail="Nickname may only contain letters, numbers, spaces, hyphens, underscores and dots.",
+                )
+            # Reject nicknames that contain profanity / hate speech.
+            # Strategy (three passes):
+            # 1. better-profanity on the raw nickname (handles leet-speak like "sh!t", "@ss").
+            # 2. better-profanity on the camelCase-expanded version ("iLoveAss" → "i Love Ass").
+            # 3. Substring match on the separator-stripped, lower-cased version to catch
+            #    hate terms embedded in longer strings ("Hitler2024", "h.i.t.l.e.r", "n_zi").
+            _camel_spaced = _spaced_camel(nickname)
+            _normalised = re.sub(r'[\-_.]', '', nickname).lower()
+            _is_profane = (
+                _profanity.contains_profanity(nickname)
+                or _profanity.contains_profanity(_camel_spaced)
+                or any(w in _normalised for w in _SUBSTRING_BANNED)
+            )
+            if _is_profane:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Nickname contains inappropriate language.",
                 )
             # Check uniqueness (case-insensitive)
             existing = db.query(models.User).filter(
