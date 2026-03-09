@@ -56,7 +56,6 @@ def _get_db_word_info(word: str, db: Session) -> Optional[Dict[str, Any]]:
 def _random_words_from_db(db: Session, count: int) -> List[Dict[str, Any]]:
     """Return a random sample of active words from the DB."""
     all_words = _get_active_words_from_db(db)
-    logger.info(f"DB has {len(all_words)} active words; requested {count}")
     count = min(count, len(all_words))
     return random.sample(all_words, count) if count > 0 else []
 
@@ -182,10 +181,10 @@ class ArticleGameService:
             selected += self._pick(
                 [w for w in wordbank_words if w["word"] not in {x["word"] for x in selected}], n_wb
             )
+            n_random = count - len(selected)
 
         # Fill remainder from DB word list, no duplicates
         selected_words = {w["word"] for w in selected}
-        logger.debug(f"Selected words before random fill: {[w['word'] for w in selected]}")
         pool = [w for w in all_db_words if w["word"] not in selected_words]
         random.shuffle(pool)
         selected += pool[:n_random]
