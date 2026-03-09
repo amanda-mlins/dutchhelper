@@ -24,7 +24,20 @@
                         Sentence Explainer<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
                     </router-link>
                     <router-link to="/conjugator" class="nav-link" @click="closeMenu">Verb Conjugator</router-link>
-                    <router-link to="/article-game" class="nav-link" @click="closeMenu">Article Game</router-link>
+                    <!-- Games dropdown (desktop: click; mobile: inline expand) -->
+                    <div class="admin-dropdown" :class="{ open: gamesOpen }" @click.stop>
+                        <button class="nav-link nav-admin admin-toggle" @click="toggleGames">
+                            🎮 Games <span class="dropdown-arrow">▾</span>
+                        </button>
+                        <div class="admin-menu">
+                            <router-link to="/article-game" class="admin-menu-item" @click="closeAll">
+                                🃏 Article Game
+                            </router-link>
+                            <router-link to="/verb-game" class="admin-menu-item" @click="closeAll">
+                                ✍️ Verb Game
+                            </router-link>
+                        </div>
+                    </div>
                     <router-link to="/word-bank" class="nav-link" :class="{ locked: !auth.isAuthenticated }"
                         @click="closeMenu">
                         Word Bank<span v-if="!auth.isAuthenticated" class="lock-icon">🔒</span>
@@ -73,13 +86,15 @@ const auth = useAuthStore()
 const router = useRouter()
 const menuOpen = ref(false)
 const adminOpen = ref(false)
+const gamesOpen = ref(false)
 
 function toggleMenu() { menuOpen.value = !menuOpen.value }
 function closeMenu() { menuOpen.value = false }
-function toggleAdmin(e) { e.stopPropagation(); adminOpen.value = !adminOpen.value }
-function closeAll() { menuOpen.value = false; adminOpen.value = false }
+function toggleAdmin(e) { e.stopPropagation(); adminOpen.value = !adminOpen.value; gamesOpen.value = false }
+function toggleGames(e) { e.stopPropagation(); gamesOpen.value = !gamesOpen.value; adminOpen.value = false }
+function closeAll() { menuOpen.value = false; adminOpen.value = false; gamesOpen.value = false }
 
-function onClickOutside() { adminOpen.value = false }
+function onClickOutside() { adminOpen.value = false; gamesOpen.value = false }
 
 onMounted(() => document.addEventListener('click', onClickOutside))
 onUnmounted(() => document.removeEventListener('click', onClickOutside))

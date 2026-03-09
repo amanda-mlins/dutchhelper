@@ -394,6 +394,87 @@ def api_get_game_history(
     return svc.get_history()
 
 
+# ============================================================================
+# Verb Game Endpoints
+# ============================================================================
+
+from app.verb_game_service import VerbGameService, generate_question, DEFAULT_VERB_POOL
+
+class VerbGameQuestionRequest(BaseModel):
+    verb: Optional[str] = None   # If omitted, backend picks a random verb
+
+class VerbGameSaveRequest(BaseModel):
+    answers: List[dict]
+
+
+@router.post("/verb-game/question")
+async def api_verb_game_question(
+    body: VerbGameQuestionRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Generate a single fill-in-the-blank question for the given verb.
+    If no verb is specified, a random verb from the default pool is chosen.
+    Requires login.
+    """
+    from app.exceptions import ProcessingError
+    verb = (body.verb or "").strip().lower() or None
+    if not verb:
+        import random as _random
+        verb = _random.choice(DEFAULT_VERB_POOL)
+    try:
+        question = await generate_question(verb)
+        return question
+    except ProcessingError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating verb game question for '{verb}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate question")
+
+
+@router.post("/verb-game/save")
+def api_verb_game_save(
+    body: VerbGameSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Save a completed verb game session. Requires login."""
+    from app.exceptions import ProcessingError
+    if not body.answers:
+        raise HTTPException(status_code=400, detail="answers list cannot be empty")
+    svc = VerbGameService(db, current_user.id)
+    try:
+        session = svc.save_game(body.answers)
+    except ProcessingError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {
+        "session_id": session.id,
+        "score": session.score,
+        "question_count": session.question_count,
+        "accuracy": session.accuracy,
+    }
+
+
+@router.get("/verb-game/stats")
+def api_verb_game_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return the user's verb game statistics. Requires login."""
+    svc = VerbGameService(db, current_user.id)
+    return svc.get_stats()
+
+
+@router.get("/verb-game/history")
+def api_verb_game_history(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all verb game sessions with per-answer detail. Requires login."""
+    svc = VerbGameService(db, current_user.id)
+    return svc.get_history()
+
+
 # --- Word Bank API Endpoints (require authentication) ---
 
 class WordBulkAddRequest(BaseModel):

@@ -724,3 +724,80 @@ Example for "xqzw" (gibberish):
         except Exception as e:
             logger.error(f"Error fetching article details from LLM for '{word}': {e}, content: {content!r}")
             raise ProcessingError(f"LLM failed to analyse '{word}': {e}")
+
+    @staticmethod
+    async def generate_verb_game_question(verb: str) -> dict:
+        """
+        Generate a fill-in-the-blank sentence for the verb conjugation game.
+
+        Returns a dict with:
+            verb_infinitive, sentence (with ___ blank), correct_answer,
+            tense, person, english_hint, distractor_hints (3 wrong forms)
+
+        Raises ProcessingError if the LLM fails or returns an invalid response.
+        """
+        if not settings.OPENROUTER_API_KEY:
+            raise ProcessingError("OPENROUTER_API_KEY environment variable not set")
+
+        client = OpenRouterService.get_client()
+        prompt = f"""You are an expert Dutch language teacher creating a verb conjugation exercise.
+
+Generate a fill-in-the-blank sentence for the Dutch verb: "{verb}"
+
+Choose a random tense (present, simple past, present perfect, or future) and a random grammatical person (ik, je/jij, hij/zij/het, we/wij, jullie, zij/ze).
+
+Return ONLY a JSON object with exactly these keys:
+{{
+  "verb_infinitive": "{verb}",
+  "sentence": "The full Dutch sentence with the conjugated verb replaced by ___",
+  "correct_answer": "the correct conjugated form of '{verb}' that fills the blank",
+  "tense": "English tense name (Present / Simple Past / Present Perfect / Future)",
+  "person": "the grammatical person used (ik / je / hij / wij / jullie / zij)",
+  "english_hint": "English translation of the full sentence (with the correct verb filled in)",
+  "distractors": ["wrong_form_1", "wrong_form_2", "wrong_form_3"]
+}}
+
+Rules:
+1. The sentence must be natural and grammatically correct Dutch.
+2. The blank (___ ) must be exactly where the conjugated verb goes.
+3. For separable verbs, put the particle at the end of the clause (e.g. "Ik ___ vroeg op." for opstaan → correct_answer: "sta").
+4. The distractors must be other plausible but WRONG conjugations of the same verb (different tense or person).
+5. Return ONLY the raw JSON — no markdown, no extra text.
+"""
+        content = ""
+        try:
+            response = await client.post(
+                "/chat/completions",
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a precise Dutch language teacher. Always return valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.8,   # Higher temp for varied sentences
+                    "max_tokens": 400,
+                },
+            )
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            data = json.loads(content)
+
+            required = ["verb_infinitive", "sentence", "correct_answer", "tense", "person", "english_hint", "distractors"]
+            for field in required:
+                if field not in data:
+                    raise ProcessingError(f"LLM response missing field: {field}")
+            if "___" not in data["sentence"]:
+                raise ProcessingError("LLM sentence does not contain a blank (___)")
+            if len(data.get("distractors", [])) < 3:
+                raise ProcessingError("LLM response has fewer than 3 distractors")
+
+            return data
+
+        except ProcessingError:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating verb game question for '{verb}': {e}, content: {content!r}")
+            raise ProcessingError(f"Failed to generate question for verb '{verb}': {e}")

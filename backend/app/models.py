@@ -232,6 +232,38 @@ class VerbConjugation(Base):
                         onupdate=lambda: datetime.now(timezone.utc))
 
 
+class VerbGameSession(Base):
+    """One completed verb conjugation game for a logged-in user."""
+    __tablename__ = "verb_game_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    played_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    question_count = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)
+    accuracy = Column(Integer, nullable=False)  # 0-100 integer percent
+
+    answers = relationship("VerbGameAnswer", back_populates="session", cascade="all, delete-orphan")
+
+
+class VerbGameAnswer(Base):
+    """One answer within a verb game session."""
+    __tablename__ = "verb_game_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("verb_game_sessions.id"), nullable=False)
+    verb_infinitive = Column(String, nullable=False)
+    sentence = Column(String, nullable=False)       # full sentence with blank
+    correct_answer = Column(String, nullable=False)  # expected conjugated form
+    user_answer = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    tense = Column(String, nullable=True)
+    person = Column(String, nullable=True)
+    english_hint = Column(String, nullable=True)    # English translation of sentence
+
+    session = relationship("VerbGameSession", back_populates="answers")
+
+
 # --- Pydantic Schemas for Article Words Admin ---
 
 class ArticleWordCreate(BaseModel):

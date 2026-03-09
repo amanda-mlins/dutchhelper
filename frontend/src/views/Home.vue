@@ -50,6 +50,14 @@
               progress tracking.</p>
           </router-link>
 
+          <router-link to="/verb-game" class="tool-card">
+            <div class="card-header">
+              <h3>✍️ Verb Game</h3>
+            </div>
+            <p>Practice conjugating Dutch verbs! Complete sentences with the correct conjugated form and track your
+              progress over time.</p>
+          </router-link>
+
           <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
             v-bind="auth.isAuthenticated ? { to: '/word-bank' } : {}" class="tool-card"
             :class="{ 'tool-card--locked': !auth.isAuthenticated }">
