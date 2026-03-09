@@ -36,6 +36,9 @@
                             <router-link to="/verb-game" class="admin-menu-item" @click="closeAll">
                                 ✍️ Verb Game
                             </router-link>
+                            <router-link to="/conjunction-game" class="admin-menu-item" @click="closeAll">
+                                🔗 Conjunction Game
+                            </router-link>
                         </div>
                     </div>
                     <router-link to="/word-bank" class="nav-link" :class="{ locked: !auth.isAuthenticated }"

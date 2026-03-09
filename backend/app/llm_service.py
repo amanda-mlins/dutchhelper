@@ -820,3 +820,81 @@ Rules:
         except Exception as e:
             logger.error(f"Error generating verb game question for '{verb}': {e}, content: {content!r}")
             raise ProcessingError(f"Failed to generate question for verb '{verb}': {e}")
+
+    @staticmethod
+    async def generate_conjunction_question(conjunction: str, conjunction_type: str) -> dict:
+        """
+        Generate a fill-in-the-blank sentence to test knowledge of a Dutch conjunction.
+
+        Args:
+            conjunction:      The Dutch conjunction to test, e.g. "omdat", "maar", "hoewel".
+            conjunction_type: Category label, e.g. "coordinating", "subordinating", "correlative".
+
+        Returns a dict with:
+            conjunction, conjunction_type, sentence (contains ___), correct_answer,
+            english_hint, distractors (list of 3 plausible wrong conjunctions)
+
+        Raises ProcessingError on LLM failure.
+        """
+        if not settings.OPENROUTER_API_KEY:
+            raise ProcessingError("OPENROUTER_API_KEY environment variable not set")
+
+        client = OpenRouterService.get_client()
+        prompt = f"""You are an expert Dutch language teacher creating a conjunction exercise.
+
+Generate a fill-in-the-blank sentence that tests the Dutch conjunction "{conjunction}" ({conjunction_type}).
+
+Return ONLY a JSON object with exactly these keys:
+{{
+  "conjunction": "{conjunction}",
+  "conjunction_type": "{conjunction_type}",
+  "sentence": "A full, natural Dutch sentence where '{conjunction}' is replaced by ___",
+  "correct_answer": "{conjunction}",
+  "english_hint": "English translation of the full sentence (with '{conjunction}' filled in)",
+  "distractors": ["wrong_conjunction_1", "wrong_conjunction_2", "wrong_conjunction_3"]
+}}
+
+Rules:
+1. The sentence must be natural, correct Dutch and clearly require "{conjunction}" — not some other conjunction.
+2. The blank (___) must appear exactly where the conjunction goes.
+3. The three distractors must be other real Dutch conjunctions that are plausible but WRONG in this sentence.
+4. Do NOT use the conjunction "{conjunction}" as a distractor.
+5. Return ONLY the raw JSON — no markdown, no extra text.
+"""
+        content = ""
+        try:
+            response = await client.post(
+                "/chat/completions",
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a precise Dutch language teacher. Always return valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 350,
+                },
+            )
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            data = json.loads(content)
+
+            required = ["conjunction", "conjunction_type", "sentence", "correct_answer", "english_hint", "distractors"]
+            for field in required:
+                if field not in data:
+                    raise ProcessingError(f"LLM response missing field: {field}")
+            if "___" not in data["sentence"]:
+                raise ProcessingError("LLM sentence does not contain a blank (___)")
+            if len(data.get("distractors", [])) < 3:
+                raise ProcessingError("LLM response has fewer than 3 distractors")
+
+            return data
+
+        except ProcessingError:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating conjunction question for '{conjunction}': {e}, content: {content!r}")
+            raise ProcessingError(f"Failed to generate question for conjunction '{conjunction}': {e}")

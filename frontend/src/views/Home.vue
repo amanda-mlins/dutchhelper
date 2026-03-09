@@ -58,6 +58,13 @@
               progress over time.</p>
           </router-link>
 
+          <router-link to="/conjunction-game" class="tool-card">
+            <div class="card-header">
+              <h3>🔗 Conjunction Game</h3>
+            </div>
+            <p>Master Dutch conjunctions! Complete sentences with the right connecting word and track your progress.</p>
+          </router-link>
+
           <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
             v-bind="auth.isAuthenticated ? { to: '/word-bank' } : {}" class="tool-card"
             :class="{ 'tool-card--locked': !auth.isAuthenticated }">

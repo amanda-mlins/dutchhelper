@@ -521,6 +521,87 @@ def api_verb_game_history(
     return svc.get_history()
 
 
+# ============================================================================
+# Conjunction Game Endpoints
+# ============================================================================
+
+from app.conjunction_game_service import ConjunctionGameService, generate_question as conj_generate_question, CONJUNCTION_POOL
+
+class ConjunctionGameQuestionRequest(BaseModel):
+    conjunction: Optional[str] = None              # Specific conjunction; omit to pick randomly
+    conjunction_types: Optional[List[str]] = None  # Filter by type(s): coordinating / subordinating / correlative
+
+class ConjunctionGameSaveRequest(BaseModel):
+    answers: List[dict]
+
+
+@router.post("/conjunction-game/question")
+async def api_conjunction_game_question(
+    body: ConjunctionGameQuestionRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Generate a single conjunction fill-in-the-blank question.
+    Requires login.
+    """
+    from app.exceptions import ProcessingError
+    conjunction = (body.conjunction or "").strip().lower() or None
+    try:
+        question = await conj_generate_question(
+            conjunction=conjunction,
+            conjunction_types=body.conjunction_types or None,
+        )
+        return question
+    except ProcessingError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating conjunction question: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate question")
+
+
+@router.post("/conjunction-game/save")
+def api_conjunction_game_save(
+    body: ConjunctionGameSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Save a completed conjunction game session. Requires login."""
+    from app.exceptions import ProcessingError
+    if not body.answers:
+        raise HTTPException(status_code=400, detail="answers list cannot be empty")
+    svc = ConjunctionGameService(db, current_user.id)
+    try:
+        session = svc.save_game(body.answers)
+    except ProcessingError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {
+        "session_id": session.id,
+        "score": session.score,
+        "question_count": session.question_count,
+        "accuracy": session.accuracy,
+    }
+
+
+@router.get("/conjunction-game/stats")
+def api_conjunction_game_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return the user's conjunction game statistics. Requires login."""
+    svc = ConjunctionGameService(db, current_user.id)
+    return svc.get_stats()
+
+
+@router.get("/conjunction-game/history")
+def api_conjunction_game_history(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all conjunction game sessions with per-answer detail. Requires login."""
+    svc = ConjunctionGameService(db, current_user.id)
+    return svc.get_history()
+
+
 # --- Word Bank API Endpoints (require authentication) ---
 
 class WordBulkAddRequest(BaseModel):

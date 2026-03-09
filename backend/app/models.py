@@ -264,6 +264,37 @@ class VerbGameAnswer(Base):
     session = relationship("VerbGameSession", back_populates="answers")
 
 
+class ConjunctionGameSession(Base):
+    """One completed conjunction game for a logged-in user."""
+    __tablename__ = "conjunction_game_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    played_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    question_count = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)
+    accuracy = Column(Integer, nullable=False)  # 0-100 integer percent
+
+    answers = relationship("ConjunctionGameAnswer", back_populates="session", cascade="all, delete-orphan")
+
+
+class ConjunctionGameAnswer(Base):
+    """One answer within a conjunction game session."""
+    __tablename__ = "conjunction_game_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("conjunction_game_sessions.id"), nullable=False)
+    conjunction = Column(String, nullable=False)       # the conjunction being tested
+    conjunction_type = Column(String, nullable=True)   # e.g. 'coordinating', 'subordinating'
+    sentence = Column(String, nullable=False)          # full sentence with blank
+    correct_answer = Column(String, nullable=False)    # the correct conjunction
+    user_answer = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    english_hint = Column(String, nullable=True)       # English translation of the sentence
+
+    session = relationship("ConjunctionGameSession", back_populates="answers")
+
+
 # --- Pydantic Schemas for Article Words Admin ---
 
 class ArticleWordCreate(BaseModel):
