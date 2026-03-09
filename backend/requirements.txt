@@ -15,3 +15,7 @@ python-multipart==0.0.22
 Authlib==1.6.9
 alembic==1.18.4
 psycopg2-binary==2.9.11
+
+# Testing
+pytest
+pytest-asyncio
