@@ -401,29 +401,75 @@ def api_get_game_history(
 from app.verb_game_service import VerbGameService, generate_question, DEFAULT_VERB_POOL
 
 class VerbGameQuestionRequest(BaseModel):
-    verb: Optional[str] = None   # If omitted, backend picks a random verb
+    verb: Optional[str] = None            # Specific verb; omit to pick randomly
+    tenses: Optional[List[str]] = None    # Restrict to these tenses; omit for all
+    use_word_bank: bool = False           # Pick random verb from user's word bank
 
 class VerbGameSaveRequest(BaseModel):
     answers: List[dict]
 
 
-@router.post("/verb-game/question")
-async def api_verb_game_question(
-    body: VerbGameQuestionRequest,
+@router.get("/verb-game/word-bank-verbs")
+def api_verb_game_word_bank_verbs(
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Generate a single fill-in-the-blank question for the given verb.
-    If no verb is specified, a random verb from the default pool is chosen.
+    Return the user's word bank entries that are verbs (word_type='verb').
+    Used by the frontend to populate the word-bank verb selection.
+    """
+    words = (
+        db.query(models.UserWord)
+        .filter(
+            models.UserWord.user_id == current_user.id,
+            models.UserWord.word_type == "verb",
+        )
+        .order_by(models.UserWord.word)
+        .all()
+    )
+    return [{"id": w.id, "word": w.word} for w in words]
+
+
+@router.post("/verb-game/question")
+async def api_verb_game_question(
+    body: VerbGameQuestionRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Generate a single fill-in-the-blank question.
+    - If verb is provided, use it.
+    - Else if use_word_bank=True, pick a random verb from the user's word bank verbs.
+    - Otherwise pick from the default pool.
+    - tenses (optional) restricts which tenses the LLM may generate.
     Requires login.
     """
     from app.exceptions import ProcessingError
+    import random as _random
+
     verb = (body.verb or "").strip().lower() or None
     if not verb:
-        import random as _random
-        verb = _random.choice(DEFAULT_VERB_POOL)
+        if body.use_word_bank:
+            wb_verbs = (
+                db.query(models.UserWord.word)
+                .filter(
+                    models.UserWord.user_id == current_user.id,
+                    models.UserWord.word_type == "verb",
+                )
+                .all()
+            )
+            wb_verb_list = [row.word for row in wb_verbs]
+            if wb_verb_list:
+                verb = _random.choice(wb_verb_list)
+            else:
+                # Fall back to default pool if word bank has no verbs
+                verb = _random.choice(DEFAULT_VERB_POOL)
+        else:
+            verb = _random.choice(DEFAULT_VERB_POOL)
+
+    tenses = body.tenses or None
     try:
-        question = await generate_question(verb)
+        question = await generate_question(verb, tenses=tenses)
         return question
     except ProcessingError as e:
         raise HTTPException(status_code=422, detail=str(e))

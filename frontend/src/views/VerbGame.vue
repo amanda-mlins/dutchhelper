@@ -50,9 +50,45 @@
                 <p class="mode-label">Enter a specific verb (optional):</p>
                 <div class="verb-input-row">
                     <input v-model="customVerb" type="text" placeholder="e.g. werken, gaan, komen…" class="verb-input"
-                        @keyup.enter="startGame" />
+                        :disabled="useWordBank" @input="onCustomVerbInput" @keyup.enter="startGame" />
                 </div>
                 <p class="verb-input-note">Leave empty to pick a random verb each round.</p>
+            </div>
+
+            <!-- Word bank verbs toggle (only shown when authenticated) -->
+            <div v-if="wordBankVerbs !== null" class="word-bank-section">
+                <div class="toggle-row" @click="toggleWordBank">
+                    <div class="toggle-track" :class="{ 'toggle-on': useWordBank }">
+                        <div class="toggle-thumb"></div>
+                    </div>
+                    <span class="toggle-label">
+                        Use my word bank verbs
+                        <span class="toggle-count">({{ wordBankVerbs.length }} verb{{ wordBankVerbs.length !== 1 ? 's' :
+                            '' }})</span>
+                    </span>
+                </div>
+                <div v-if="useWordBank && wordBankVerbs.length === 0" class="wb-empty">
+                    Your word bank has no verbs yet. <router-link to="/word-bank">Add some →</router-link>
+                </div>
+                <div v-if="useWordBank && wordBankVerbs.length" class="wb-preview">
+                    <span v-for="v in wordBankVerbs" :key="v.id" class="wb-chip">{{ v.word }}</span>
+                </div>
+                <p v-if="useWordBank" class="verb-input-note">Custom verb field is ignored when using word bank.</p>
+            </div>
+
+            <!-- Tense filter -->
+            <div class="tense-section">
+                <p class="mode-label">Which tenses to practice?</p>
+                <div class="tense-options">
+                    <label v-for="t in ALL_TENSES" :key="t" class="tense-chip"
+                        :class="{ 'tense-active': selectedTenses.includes(t) }">
+                        <input type="checkbox" :value="t" v-model="selectedTenses" hidden />
+                        {{ t }}
+                    </label>
+                </div>
+                <p v-if="selectedTenses.length === 0" class="tense-warning">
+                    ⚠️ Select at least one tense.
+                </p>
             </div>
 
             <!-- Question count -->
@@ -208,15 +244,21 @@
 <script>
 import { authAxios } from '../stores/auth.js';
 
+const ALL_TENSES = ['Present', 'Simple Past', 'Present Perfect', 'Future'];
+
 export default {
     name: 'VerbGame',
 
     data() {
         return {
+            ALL_TENSES,
             phase: 'setup',         // 'setup' | 'playing' | 'results'
             // setup
             customVerb: '',
             questionCount: 10,
+            selectedTenses: [...ALL_TENSES],  // all tenses selected by default
+            useWordBank: false,
+            wordBankVerbs: null,   // null = not loaded yet / not authenticated
             stats: null,
             setupError: null,
 
@@ -261,6 +303,15 @@ export default {
 
     methods: {
         // ── Setup ──────────────────────────────────────────────────────────
+        onCustomVerbInput() {
+            if (this.customVerb) this.useWordBank = false;
+        },
+
+        toggleWordBank() {
+            this.useWordBank = !this.useWordBank;
+            if (this.useWordBank) this.customVerb = '';
+        },
+
         async fetchStats() {
             try {
                 const { data } = await authAxios.get('/api/verb-game/stats');
@@ -270,7 +321,21 @@ export default {
             }
         },
 
+        async fetchWordBankVerbs() {
+            try {
+                const { data } = await authAxios.get('/api/verb-game/word-bank-verbs');
+                this.wordBankVerbs = data;
+            } catch {
+                // Not authenticated or unavailable — keep null to hide the toggle
+                this.wordBankVerbs = null;
+            }
+        },
+
         async startGame() {
+            if (this.selectedTenses.length === 0) {
+                this.setupError = 'Please select at least one tense.';
+                return;
+            }
             this.setupError = null;
             this.answers = [];
             this.currentIndex = 0;
@@ -287,8 +352,13 @@ export default {
             this.answered = false;
 
             try {
-                const verb = this.customVerb.trim().toLowerCase() || null;
-                const { data } = await authAxios.post('/api/verb-game/question', { verb });
+                const verb = (!this.useWordBank && this.customVerb.trim().toLowerCase()) || null;
+                const payload = {
+                    verb,
+                    tenses: this.selectedTenses.length < ALL_TENSES.length ? this.selectedTenses : null,
+                    use_word_bank: this.useWordBank,
+                };
+                const { data } = await authAxios.post('/api/verb-game/question', payload);
                 this.currentQuestion = data;
                 this.currentOptions = this.buildOptions(data);
                 this.$nextTick(() => this.$refs.answerInput?.focus());
@@ -383,6 +453,7 @@ export default {
 
     created() {
         this.fetchStats();
+        this.fetchWordBankVerbs();
     },
 };
 </script>
@@ -594,6 +665,139 @@ export default {
     opacity: 0.45;
     cursor: not-allowed;
     transform: none;
+}
+
+.verb-input:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* Word bank section */
+.word-bank-section {
+    margin-bottom: 24px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 10px;
+}
+
+.toggle-track {
+    width: 44px;
+    height: 24px;
+    background: #d1d5db;
+    border-radius: 12px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.toggle-track.toggle-on {
+    background: #667eea;
+}
+
+.toggle-thumb {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-track.toggle-on .toggle-thumb {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 15px;
+    color: #374151;
+    font-weight: 600;
+}
+
+.toggle-count {
+    font-weight: 400;
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.wb-empty {
+    font-size: 14px;
+    color: #9ca3af;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.wb-empty a {
+    color: #667eea;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.wb-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.wb-chip {
+    padding: 4px 12px;
+    background: #ede9fe;
+    color: #6d28d9;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Tense picker */
+.tense-section {
+    margin-bottom: 24px;
+}
+
+.tense-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 6px;
+}
+
+.tense-chip {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 2px solid #d1d5db;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #374151;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.tense-chip.tense-active {
+    border-color: #667eea;
+    background: #667eea;
+    color: #fff;
+}
+
+.tense-warning {
+    text-align: center;
+    font-size: 13px;
+    color: #b45309;
+    background: #fffbeb;
+    border-radius: 8px;
+    padding: 6px 12px;
 }
 
 /* ── Playing ────────────────────────────────────────────────────────────── */

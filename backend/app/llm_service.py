@@ -726,25 +726,44 @@ Example for "xqzw" (gibberish):
             raise ProcessingError(f"LLM failed to analyse '{word}': {e}")
 
     @staticmethod
-    async def generate_verb_game_question(verb: str) -> dict:
+    async def generate_verb_game_question(verb: str, tenses: list[str] | None = None) -> dict:
         """
         Generate a fill-in-the-blank sentence for the verb conjugation game.
 
+        Args:
+            verb:   Dutch verb infinitive.
+            tenses: Optional list of allowed tenses, e.g. ["Present", "Simple Past"].
+                    When provided the LLM must pick from this list only.
+                    Accepted values: "Present", "Simple Past", "Present Perfect", "Future".
+
         Returns a dict with:
             verb_infinitive, sentence (with ___ blank), correct_answer,
-            tense, person, english_hint, distractor_hints (3 wrong forms)
+            tense, person, english_hint, distractors (3 wrong forms)
 
         Raises ProcessingError if the LLM fails or returns an invalid response.
         """
         if not settings.OPENROUTER_API_KEY:
             raise ProcessingError("OPENROUTER_API_KEY environment variable not set")
 
+        VALID_TENSES = {"Present", "Simple Past", "Present Perfect", "Future"}
+        if tenses:
+            allowed = [t for t in tenses if t in VALID_TENSES]
+        else:
+            allowed = list(VALID_TENSES)
+        if not allowed:
+            allowed = list(VALID_TENSES)
+
+        if len(allowed) == 1:
+            tense_instruction = f'Use ONLY the "{allowed[0]}" tense.'
+        else:
+            tense_instruction = f'Choose ONE tense from this list ONLY: {", ".join(allowed)}.'
+
         client = OpenRouterService.get_client()
         prompt = f"""You are an expert Dutch language teacher creating a verb conjugation exercise.
 
 Generate a fill-in-the-blank sentence for the Dutch verb: "{verb}"
 
-Choose a random tense (present, simple past, present perfect, or future) and a random grammatical person (ik, je/jij, hij/zij/het, we/wij, jullie, zij/ze).
+{tense_instruction} Choose a random grammatical person (ik, je/jij, hij/zij/het, we/wij, jullie, zij/ze).
 
 Return ONLY a JSON object with exactly these keys:
 {{

@@ -31,13 +31,14 @@ DEFAULT_VERB_POOL = [
 ]
 
 
-async def generate_question(verb: str) -> Dict[str, Any]:
+async def generate_question(verb: str, tenses: list[str] | None = None) -> Dict[str, Any]:
     """
     Ask the LLM to generate a single fill-in-the-blank question for `verb`.
+    `tenses` is an optional list of tense names to restrict the question to.
     Returns the raw LLM dict (verb_infinitive, sentence, correct_answer, …).
     Raises ProcessingError on failure.
     """
-    return await OpenRouterService.generate_verb_game_question(verb)
+    return await OpenRouterService.generate_verb_game_question(verb, tenses=tenses)
 
 
 class VerbGameService:
