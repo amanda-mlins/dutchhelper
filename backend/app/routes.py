@@ -1218,3 +1218,124 @@ async def admin_bulk_import_verbs(
         "summary": {"added": added, "skipped": skipped, "errors": errors, "total": len(results)},
         "results": results,
     }
+
+
+# ============================================================================
+# Admin — Conjunction Sentences CRUD
+# ============================================================================
+
+class ConjunctionSentenceUpdate(BaseModel):
+    sentence: Optional[str] = None
+    correct_answer: Optional[str] = None
+    english_hint: Optional[str] = None
+    distractors: Optional[List[str]] = None   # list of 3 strings
+    explanation: Optional[str] = None
+
+
+@router.get("/admin/conjunction-sentences")
+def admin_list_conjunction_sentences(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Return all cached conjunction sentences with global aggregate stats (admin only)."""
+    import json as _json
+
+    sentences = (
+        db.query(models.ConjunctionSentence)
+        .order_by(models.ConjunctionSentence.conjunction, models.ConjunctionSentence.id)
+        .all()
+    )
+
+    # Count distinct users who have seen each sentence
+    from sqlalchemy import func
+    user_counts = dict(
+        db.query(
+            models.ConjunctionSentenceStat.sentence_id,
+            func.count(models.ConjunctionSentenceStat.user_id),
+        )
+        .group_by(models.ConjunctionSentenceStat.sentence_id)
+        .all()
+    )
+
+    result = []
+    for s in sentences:
+        error_rate = (
+            round((1 - s.times_correct / s.times_seen) * 100)
+            if s.times_seen else None
+        )
+        result.append({
+            "id": s.id,
+            "conjunction": s.conjunction,
+            "conjunction_type": s.conjunction_type,
+            "sentence": s.sentence,
+            "correct_answer": s.correct_answer,
+            "english_hint": s.english_hint,
+            "distractors": _json.loads(s.distractors) if s.distractors else [],
+            "explanation": s.explanation,
+            "times_seen": s.times_seen,
+            "times_correct": s.times_correct,
+            "error_rate": error_rate,
+            "unique_users": user_counts.get(s.id, 0),
+            "created_at": s.created_at.isoformat(),
+        })
+    return result
+
+
+@router.patch("/admin/conjunction-sentences/{sentence_id}")
+def admin_update_conjunction_sentence(
+    sentence_id: int,
+    body: ConjunctionSentenceUpdate,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Edit a cached conjunction sentence (admin only)."""
+    import json as _json
+
+    s = db.get(models.ConjunctionSentence, sentence_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Sentence not found")
+
+    if body.sentence is not None:
+        if "___" not in body.sentence:
+            raise HTTPException(status_code=400, detail="sentence must contain ___")
+        s.sentence = body.sentence
+    if body.correct_answer is not None:
+        s.correct_answer = body.correct_answer
+    if body.english_hint is not None:
+        s.english_hint = body.english_hint
+    if body.distractors is not None:
+        if len(body.distractors) != 3:
+            raise HTTPException(status_code=400, detail="distractors must be a list of exactly 3 strings")
+        s.distractors = _json.dumps(body.distractors)
+    if body.explanation is not None:
+        s.explanation = body.explanation
+
+    db.commit()
+    db.refresh(s)
+    return {
+        "id": s.id,
+        "conjunction": s.conjunction,
+        "conjunction_type": s.conjunction_type,
+        "sentence": s.sentence,
+        "correct_answer": s.correct_answer,
+        "english_hint": s.english_hint,
+        "distractors": _json.loads(s.distractors) if s.distractors else [],
+        "explanation": s.explanation,
+        "times_seen": s.times_seen,
+        "times_correct": s.times_correct,
+        "created_at": s.created_at.isoformat(),
+    }
+
+
+@router.delete("/admin/conjunction-sentences/{sentence_id}", status_code=204)
+def admin_delete_conjunction_sentence(
+    sentence_id: int,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Delete a cached conjunction sentence and all user stats for it (admin only)."""
+    s = db.get(models.ConjunctionSentence, sentence_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Sentence not found")
+    db.delete(s)
+    db.commit()

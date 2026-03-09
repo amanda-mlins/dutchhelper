@@ -59,7 +59,10 @@
                                 📝 Article Words
                             </router-link>
                             <router-link to="/admin/verbs" class="admin-menu-item" @click="closeAll">
-                                � Verb Cache
+                                📚 Verb Cache
+                            </router-link>
+                            <router-link to="/admin/conjunction-sentences" class="admin-menu-item" @click="closeAll">
+                                🔗 Conjunction Sentences
                             </router-link>
                         </div>
                     </div>

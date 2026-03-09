@@ -15,6 +15,7 @@ import Register from './views/Register.vue'
 import AuthCallback from './views/AuthCallback.vue'
 import AdminWords from './views/AdminWords.vue'
 import AdminVerbs from './views/AdminVerbs.vue'
+import AdminConjunctionSentences from './views/AdminConjunctionSentences.vue'
 import { useAuthStore } from './stores/auth.js'
 
 const routes = [
@@ -117,6 +118,12 @@ const routes = [
     path: '/admin/verbs',
     name: 'AdminVerbs',
     component: AdminVerbs,
+    meta: { adminOnly: true }
+  },
+  {
+    path: '/admin/conjunction-sentences',
+    name: 'AdminConjunctionSentences',
+    component: AdminConjunctionSentences,
     meta: { adminOnly: true }
   }
 ]
