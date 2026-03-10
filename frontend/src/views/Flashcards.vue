@@ -34,6 +34,10 @@
                     <button :class="['mode-tab', { active: setupMode === 'pick' }]" @click="setupMode = 'pick'">
                         Pick words
                     </button>
+                    <button :class="['mode-tab', { active: setupMode === 'prep-verbs' }]"
+                        @click="setupMode = 'prep-verbs'">
+                        🎯 Verb + Prep <span class="count-badge">{{ prepPairs.length }}</span>
+                    </button>
                 </div>
 
                 <!-- Category picker -->
@@ -74,6 +78,26 @@
                     </div>
                 </div>
 
+                <!-- Prep-verbs info panel -->
+                <div v-if="setupMode === 'prep-verbs'" class="prep-verbs-panel">
+                    <div v-if="isPrepLoading" class="pick-toolbar">Loading pairs…</div>
+                    <div v-else-if="prepLoadError" class="warning-msg">{{ prepLoadError }}</div>
+                    <template v-else>
+                        <div class="pick-toolbar">
+                            <span class="pick-count">{{ prepPairs.length }} verb+preposition pairs</span>
+                        </div>
+                        <div class="pick-list">
+                            <div v-for="p in prepPairs" :key="p.id" class="pick-row prep-pair-row">
+                                <span class="pick-word">
+                                    {{ p.reflexive ? (p.verb.includes('zich ') ? '' : 'zich ') : '' }}{{ p.verb }}
+                                    <strong class="prep-highlight">{{ p.preposition }}</strong>
+                                </span>
+                                <span class="pick-trans">{{ p.english_translation }}</span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
                 <!-- Options row -->
                 <div class="options-row">
                     <label class="option-label">
@@ -85,9 +109,12 @@
                 <div v-if="setupMode === 'pick' && pickedIds.size === 0" class="warning-msg">
                     Select at least one word to start.
                 </div>
+                <div v-if="setupMode === 'prep-verbs' && prepPairs.length === 0 && !isPrepLoading" class="warning-msg">
+                    No pairs available yet — play the Preposition Game first to generate some!
+                </div>
 
                 <button class="btn-start"
-                    :disabled="(setupMode === 'pick' && pickedIds.size === 0) || (setupMode === 'category' && !selectedCategory)"
+                    :disabled="(setupMode === 'pick' && pickedIds.size === 0) || (setupMode === 'category' && !selectedCategory) || (setupMode === 'prep-verbs' && prepPairs.length === 0)"
                     @click="startSession">
                     Start session ({{ deckSize }} card{{ deckSize !== 1 ? 's' : '' }})
                 </button>
@@ -110,21 +137,45 @@
                 <div class="card-inner" :class="{ flipped: isFlipped }">
                     <!-- Front -->
                     <div class="card-face card-front">
-                        <span class="card-side-label">Dutch</span>
-                        <p class="card-word">{{ currentCard.word }}</p>
-                        <span class="card-type-badge">{{ currentCard.word_type }}</span>
+                        <span class="card-side-label">{{ isPrepMode ? 'Verb + Preposition' : 'Dutch' }}</span>
+                        <!-- Word-bank card front -->
+                        <template v-if="!isPrepMode">
+                            <p class="card-word">{{ currentCard.word }}</p>
+                            <span class="card-type-badge">{{ currentCard.word_type }}</span>
+                        </template>
+                        <!-- Prep-verb card front -->
+                        <template v-else>
+                            <p class="card-word prep-front-verb">
+                                {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
+                                currentCard.verb }}
+                                <span class="prep-front-prep">{{ currentCard.preposition }}</span>
+                            </p>
+                        </template>
                         <p class="card-hint">Click to reveal →</p>
                     </div>
                     <!-- Back -->
                     <div class="card-face card-back">
                         <span class="card-side-label">Translation &amp; Example</span>
-                        <p class="card-translation">{{ currentCard.details?.translation_en || '—' }}</p>
-                        <p v-if="currentCard.details?.definition" class="card-definition">
-                            {{ currentCard.details.definition }}
-                        </p>
-                        <p v-if="currentCard.details?.example" class="card-example">
-                            "{{ currentCard.details.example }}"
-                        </p>
+                        <!-- Word-bank card back -->
+                        <template v-if="!isPrepMode">
+                            <p class="card-translation">{{ currentCard.details?.translation_en || '—' }}</p>
+                            <p v-if="currentCard.details?.definition" class="card-definition">
+                                {{ currentCard.details.definition }}
+                            </p>
+                            <p v-if="currentCard.details?.example" class="card-example">
+                                "{{ currentCard.details.example }}"
+                            </p>
+                        </template>
+                        <!-- Prep-verb card back -->
+                        <template v-else>
+                            <p class="card-translation">{{ currentCard.english_translation }}</p>
+                            <p v-if="currentCard.prepExample" class="card-example">
+                                "{{ currentCard.prepExample }}"
+                            </p>
+                            <p v-if="currentCard.prepExampleEn" class="card-example card-example-en">
+                                {{ currentCard.prepExampleEn }}
+                            </p>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -179,13 +230,21 @@
                 </div>
             </div>
 
-            <!-- Words to review again -->
+            <!-- Words / pairs to review again -->
             <div v-if="wrongWords.length" class="review-list">
-                <h3>Words to practise more:</h3>
+                <h3>{{ wrongWords[0]?._prepCard ? 'Pairs' : 'Words' }} to practise more:</h3>
                 <div class="review-chips">
-                    <span v-for="w in wrongWords" :key="w.id" class="review-chip">
-                        {{ w.word }}
-                        <span class="review-chip-trans">{{ w.details?.translation_en }}</span>
+                    <!-- Word-bank missed card -->
+                    <span v-for="w in wrongWords" :key="_cardKey(w)" class="review-chip">
+                        <template v-if="!w._prepCard">
+                            {{ w.word }}
+                            <span class="review-chip-trans">{{ w.details?.translation_en }}</span>
+                        </template>
+                        <template v-else>
+                            {{ w.reflexive ? (w.verb.includes('zich ') ? '' : 'zich ') : '' }}{{ w.verb }}
+                            <strong class="review-chip-prep">{{ w.preposition }}</strong>
+                            <span class="review-chip-trans">{{ w.english_translation }}</span>
+                        </template>
                     </span>
                 </div>
             </div>
@@ -215,17 +274,22 @@ export default {
             isLoading: false,
             loadError: null,
             allWords: [],
-            setupMode: 'all',        // 'all' | 'category' | 'pick'
+            setupMode: 'all',        // 'all' | 'category' | 'pick' | 'prep-verbs'
             pickedIds: new Set(),
             shuffle: true,
             categories: [],
             selectedCategory: '',
 
+            // ----- prep-verb mode -----
+            prepPairs: [],
+            isPrepLoading: false,
+            prepLoadError: null,
+
             // ----- study -----
             deck: [],
             currentIndex: 0,
             isFlipped: false,
-            ratings: {},             // word.id → true (got it) | false (wrong)
+            ratings: {},             // card key → true (got it) | false (wrong)
 
             // ----- results -----
             // computed from ratings at end of session
@@ -244,9 +308,14 @@ export default {
             return map;
         },
 
+        isPrepMode() {
+            return this.setupMode === 'prep-verbs';
+        },
+
         deckSize() {
             if (this.setupMode === 'all') return this.allWords.length;
             if (this.setupMode === 'category') return this.selectedCategory ? (this.wordsByCategory[this.selectedCategory]?.length || 0) : 0;
+            if (this.setupMode === 'prep-verbs') return this.prepPairs.length;
             return this.pickedIds.size;
         },
 
@@ -269,7 +338,8 @@ export default {
             return Object.keys(this.ratings).length;
         },
         wrongWords() {
-            return this.deck.filter(w => this.ratings[w.id] === false);
+            // Works for both word-bank cards (have .word) and prep-pair cards (have .verb)
+            return this.deck.filter(w => this.ratings[this._cardKey(w)] === false);
         },
     },
 
@@ -294,11 +364,31 @@ export default {
             }
         },
 
+        async fetchPrepPairs() {
+            this.isPrepLoading = true;
+            this.prepLoadError = null;
+            try {
+                const { data } = await authAxios.get('/api/prep-verb-game/pairs');
+                // Keep only pairs that have at least a prep_sentence (generated by LLM)
+                this.prepPairs = data.filter(p => p.prep_sentence);
+            } catch {
+                this.prepLoadError = 'Failed to load verb+preposition pairs.';
+            } finally {
+                this.isPrepLoading = false;
+            }
+        },
+
         togglePick(id) {
             const next = new Set(this.pickedIds);
             if (next.has(id)) next.delete(id);
             else next.add(id);
             this.pickedIds = next;
+        },
+
+        /** Stable key used as the ratings map key for any card type */
+        _cardKey(card) {
+            if (card._prepCard) return `prep-${card.id}`;
+            return String(card.id);
         },
 
         buildDeck() {
@@ -307,6 +397,17 @@ export default {
                 source = [...this.allWords];
             } else if (this.setupMode === 'category') {
                 source = this.selectedCategory ? [...(this.wordsByCategory[this.selectedCategory] || [])] : [];
+            } else if (this.setupMode === 'prep-verbs') {
+                // Map each pair to a flashcard-shaped object
+                source = this.prepPairs.map(p => ({
+                    ...p,
+                    _prepCard: true,
+                    // Example sentence: prefer prep_sentence (has ___ blank), show filled-in version
+                    prepExample: p.prep_sentence
+                        ? p.prep_sentence.replace('___', p.preposition)
+                        : null,
+                    prepExampleEn: p.prep_english || null,
+                }));
             } else {
                 source = this.allWords.filter(w => this.pickedIds.has(w.id));
             }
@@ -335,7 +436,7 @@ export default {
         },
 
         rate(correct) {
-            this.ratings[this.currentCard.id] = correct;
+            this.ratings[this._cardKey(this.currentCard)] = correct;
             this.advance();
         },
 
@@ -407,8 +508,8 @@ export default {
         },
 
         practiseWrong() {
-            // Rebuild deck with only the missed words, no shuffle toggle needed
-            const missed = this.deck.filter(w => this.ratings[w.id] === false);
+            // Rebuild deck with only the missed cards
+            const missed = this.deck.filter(w => this.ratings[this._cardKey(w)] === false);
             const source = this.shuffle ? [...missed].sort(() => Math.random() - 0.5) : missed;
             this.deck = source;
             this.currentIndex = 0;
@@ -421,6 +522,7 @@ export default {
 
     created() {
         this.fetchWords();
+        this.fetchPrepPairs();
     },
 };
 </script>
@@ -1096,6 +1198,58 @@ kbd {
 
 .btn-secondary:hover {
     background: #f3f4f6;
+}
+
+/* ── Prep-verb mode extras ──────────────────────────────────────────────── */
+.prep-verbs-panel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.prep-pair-row {
+    cursor: default;
+}
+
+.prep-highlight {
+    color: #667eea;
+    font-weight: 700;
+}
+
+/* Prep-verb card front */
+.prep-front-verb {
+    font-size: clamp(22px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.prep-front-prep {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    padding: 0 8px;
+    margin-left: 6px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+/* Back: English translation of the example */
+.card-example-en {
+    color: #aaa;
+    font-style: normal;
+    font-size: 13px;
+    border-top: none;
+    padding-top: 0;
+    margin-top: -4px;
+}
+
+/* Missed pair chip */
+.review-chip-prep {
+    color: #667eea;
+    margin-left: 2px;
 }
 
 /* ── Mobile tweaks ──────────────────────────────────────────────────────── */

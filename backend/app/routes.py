@@ -1417,9 +1417,39 @@ def prep_verb_stats(
 
 
 @router.get("/prep-verb-game/pairs")
-def prep_verb_pairs(_: Session = Depends(get_db)):
-    """Return the full built-in list of verb+preposition pairs (for the setup screen)."""
-    return [
-        {"verb": v, "preposition": p, "english": e, "reflexive": r}
-        for v, p, e, r in _PREP_VERB_PAIRS
-    ]
+def prep_verb_pairs(db: Session = Depends(get_db)):
+    """Return all DB-persisted pairs (which have LLM-generated sentences) plus
+    a stub entry for any built-in pair not yet generated, so the flashcard
+    tab always shows the full catalogue."""
+    from app.models import PrepVerbPair
+    db_pairs = db.query(PrepVerbPair).all()
+    db_keys = {(p.verb, p.preposition) for p in db_pairs}
+
+    result = []
+    # Persisted pairs first (they have example sentences)
+    for p in db_pairs:
+        result.append({
+            "id": p.id,
+            "verb": p.verb,
+            "preposition": p.preposition,
+            "english_translation": p.english_translation,
+            "reflexive": p.reflexive,
+            "prep_sentence": p.prep_sentence,
+            "prep_english": p.prep_english,
+            "prep_explanation": p.prep_explanation,
+        })
+    # Stubs for built-in pairs not yet in DB
+    for v, p, e, r in _PREP_VERB_PAIRS:
+        if (v, p) not in db_keys:
+            result.append({
+                "id": None,
+                "verb": v,
+                "preposition": p,
+                "english_translation": e,
+                "reflexive": r,
+                "prep_sentence": None,
+                "prep_english": None,
+                "prep_explanation": None,
+            })
+    return result
+

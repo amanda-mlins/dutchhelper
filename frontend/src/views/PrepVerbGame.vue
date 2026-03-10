@@ -108,7 +108,7 @@
                 <div class="pair-header">
                     <span class="pair-label">Verb + preposition</span>
                     <span class="pair-badge">
-                        {{ currentQuestion.reflexive ? 'zich ' : '' }}{{ currentQuestion.verb }}
+                        {{ currentQuestion.reflexive ? '' : '' }}{{ currentQuestion.verb }}
                         <strong>_______</strong>
                     </span>
                     <span class="pair-en">{{ currentQuestion.english_translation }}</span>
