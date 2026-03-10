@@ -121,59 +121,65 @@ def _pick_from_pool(
 
 async def generate_question(
     db: Session,
-    user_id: int,
+    user_id: Optional[int],
     conjunction: Optional[str] = None,
     conjunction_types: Optional[List[str]] = None,
     excluded_sentence_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
-    Return a conjunction fill-in-the-blank question for `user_id`.
+    Return a conjunction fill-in-the-blank question.
 
     Priority order:
-      1. Cached sentences the user previously got *wrong* (needs_review=True),
-         not already in this game session (excluded_sentence_ids).
-      2. Cached sentences matching the filters that this user hasn't seen yet,
-         not already in this game session.
+      1. (Logged-in users only) Cached sentences the user previously got
+         *wrong* (needs_review=True), not already in this game session.
+      2. Cached sentences matching the filters that this user hasn't seen yet
+         (or all cached sentences for guests), not in excluded_sentence_ids.
       3. Generate a new sentence via LLM, store it, and return it.
     """
     excluded: Set[int] = set(excluded_sentence_ids or [])
 
     # ── 1. Review queue: sentences the user got wrong previously ──────────
-    review_q = (
-        db.query(models.ConjunctionSentenceStat)
-        .join(models.ConjunctionSentence)
-        .filter(
-            models.ConjunctionSentenceStat.user_id == user_id,
-            models.ConjunctionSentenceStat.needs_review == True,  # noqa: E712
+    # (Only applicable for logged-in users)
+    if user_id is not None:
+        review_q = (
+            db.query(models.ConjunctionSentenceStat)
+            .join(models.ConjunctionSentence)
+            .filter(
+                models.ConjunctionSentenceStat.user_id == user_id,
+                models.ConjunctionSentenceStat.needs_review == True,  # noqa: E712
+            )
         )
-    )
-    if excluded:
-        review_q = review_q.filter(
-            models.ConjunctionSentenceStat.sentence_id.notin_(excluded)
-        )
-    if conjunction_types:
-        review_q = review_q.filter(
-            models.ConjunctionSentence.conjunction_type.in_(conjunction_types)
-        )
-    if conjunction:
-        review_q = review_q.filter(
-            models.ConjunctionSentence.conjunction == conjunction
-        )
-    review_candidates = review_q.all()
-    if review_candidates:
-        stat = random.choice(review_candidates)
-        return _sentence_to_dict(stat.sentence, is_review=True)
+        if excluded:
+            review_q = review_q.filter(
+                models.ConjunctionSentenceStat.sentence_id.notin_(excluded)
+            )
+        if conjunction_types:
+            review_q = review_q.filter(
+                models.ConjunctionSentence.conjunction_type.in_(conjunction_types)
+            )
+        if conjunction:
+            review_q = review_q.filter(
+                models.ConjunctionSentence.conjunction == conjunction
+            )
+        review_candidates = review_q.all()
+        if review_candidates:
+            stat = random.choice(review_candidates)
+            return _sentence_to_dict(stat.sentence, is_review=True)
 
     # ── 2. Cache hit: unseen sentences matching filters ───────────────────
     # "Unseen" = no stat row for this user OR times_seen == 0
-    seen_ids_q = (
-        db.query(models.ConjunctionSentenceStat.sentence_id)
-        .filter(
-            models.ConjunctionSentenceStat.user_id == user_id,
-            models.ConjunctionSentenceStat.times_seen > 0,
+    # For guests, treat all cached sentences as candidates (minus excluded).
+    if user_id is not None:
+        seen_ids_q = (
+            db.query(models.ConjunctionSentenceStat.sentence_id)
+            .filter(
+                models.ConjunctionSentenceStat.user_id == user_id,
+                models.ConjunctionSentenceStat.times_seen > 0,
+            )
         )
-    )
-    seen_ids = {row.sentence_id for row in seen_ids_q.all()}
+        seen_ids = {row.sentence_id for row in seen_ids_q.all()}
+    else:
+        seen_ids = set()
     already_excluded = excluded | seen_ids
 
     cached_q = db.query(models.ConjunctionSentence)

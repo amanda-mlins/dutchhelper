@@ -540,21 +540,22 @@ class ConjunctionGameSaveRequest(BaseModel):
 async def api_conjunction_game_question(
     body: ConjunctionGameQuestionRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """
     Return a conjunction fill-in-the-blank question.
 
     Priority: needs_review sentences → unseen cached sentences → LLM-generated (then cached).
     Pass excluded_sentence_ids to avoid repeating questions within the same game session.
-    Requires login.
+    Works for both logged-in users and guests (guests skip the personal review queue).
     """
     from app.exceptions import ProcessingError
     conjunction = (body.conjunction or "").strip().lower() or None
+    user_id = current_user.id if current_user else None
     try:
         question = await conj_generate_question(
             db=db,
-            user_id=current_user.id,
+            user_id=user_id,
             conjunction=conjunction,
             conjunction_types=body.conjunction_types or None,
             excluded_sentence_ids=body.excluded_sentence_ids or [],
