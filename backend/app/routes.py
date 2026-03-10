@@ -434,22 +434,23 @@ def api_verb_game_word_bank_verbs(
 async def api_verb_game_question(
     body: VerbGameQuestionRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """
     Generate a single fill-in-the-blank question.
     - If verb is provided, use it.
-    - Else if use_word_bank=True, pick a random verb from the user's word bank verbs.
+    - Else if use_word_bank=True and user is logged in, pick a random verb from
+      the user's word bank verbs (falls back to default pool if word bank is empty).
     - Otherwise pick from the default pool.
     - tenses (optional) restricts which tenses the LLM may generate.
-    Requires login.
+    Works for both logged-in users and guests (guests always use the default pool).
     """
     from app.exceptions import ProcessingError
     import random as _random
 
     verb = (body.verb or "").strip().lower() or None
     if not verb:
-        if body.use_word_bank:
+        if body.use_word_bank and current_user:
             wb_verbs = (
                 db.query(models.UserWord.word)
                 .filter(

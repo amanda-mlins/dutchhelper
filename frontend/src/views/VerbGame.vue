@@ -274,7 +274,7 @@
 </template>
 
 <script>
-import { authAxios } from '../stores/auth.js';
+import { authAxios, useAuthStore } from '../stores/auth.js';
 
 const ALL_TENSES = ['Present', 'Simple Past', 'Present Perfect', 'Future'];
 
@@ -316,6 +316,7 @@ export default {
             wordBankVerbs: null,   // null = not loaded yet / not authenticated
             stats: null,
             setupError: null,
+            isLoggedIn: false,
 
             // playing
             questions: [],          // pre-fetched + future questions
@@ -368,6 +369,7 @@ export default {
         },
 
         async fetchStats() {
+            if (!this.isLoggedIn) return;
             try {
                 const { data } = await authAxios.get('/api/verb-game/stats');
                 this.stats = data;
@@ -377,6 +379,7 @@ export default {
         },
 
         async fetchWordBankVerbs() {
+            if (!this.isLoggedIn) return;
             try {
                 const { data } = await authAxios.get('/api/verb-game/word-bank-verbs');
                 this.wordBankVerbs = data;
@@ -481,6 +484,8 @@ export default {
             this.finalAccuracy = Math.round(this.finalScore / this.answers.length * 100);
             this.phase = 'results';
 
+            if (!this.isLoggedIn) return;  // guests — no save, no error shown
+
             this.isSaving = true;
             this.saveError = null;
             try {
@@ -507,6 +512,8 @@ export default {
     },
 
     created() {
+        const auth = useAuthStore();
+        this.isLoggedIn = auth.isAuthenticated;
         this.fetchStats();
         this.fetchWordBankVerbs();
     },
