@@ -8,6 +8,7 @@ import VerbGame from './views/VerbGame.vue'
 import VerbGameStats from './views/VerbGameStats.vue'
 import ConjunctionGame from './views/ConjunctionGame.vue'
 import ConjunctionGameStats from './views/ConjunctionGameStats.vue'
+import PrepVerbGame from './views/PrepVerbGame.vue'
 import WordBank from './views/WordBank.vue'
 import Flashcards from './views/Flashcards.vue'
 import Login from './views/Login.vue'
@@ -96,6 +97,12 @@ const routes = [
     path: '/conjunction-game/stats',
     name: 'ConjunctionGameStats',
     component: ConjunctionGameStats,
+  },
+  {
+    path: '/prep-verb-game',
+    name: 'PrepVerbGame',
+    component: PrepVerbGame,
+    meta: { public: true }
   },
   {
     path: '/word-bank',

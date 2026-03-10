@@ -349,6 +349,104 @@ class ConjunctionSentenceStat(Base):
     sentence = relationship("ConjunctionSentence", back_populates="user_stats")
 
 
+# ---------------------------------------------------------------------------
+# Fixed-Preposition Verb Game
+# ---------------------------------------------------------------------------
+
+class PrepVerbPair(Base):
+    """
+    Cached verb+preposition pair (e.g. 'beginnen met', 'denken aan').
+
+    Stores:
+      - LLM-generated sentences for BOTH game modes.
+      - Global usage / correctness stats.
+    """
+    __tablename__ = "prep_verb_pairs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    verb = Column(String, nullable=False, index=True)          # infinitive, e.g. "beginnen"
+    preposition = Column(String, nullable=False)                # e.g. "met"
+    english_translation = Column(String, nullable=True)        # e.g. "to begin with"
+    reflexive = Column(Boolean, default=False, nullable=False) # True for "zich concentreren op"
+
+    # Mode 1: fill-in the PREPOSITION only
+    # Sentence has exactly one ___ where the preposition goes.
+    prep_sentence = Column(Text, nullable=True)      # Dutch sentence with ___
+    prep_english = Column(Text, nullable=True)       # English translation / hint
+    prep_explanation = Column(Text, nullable=True)   # Why this preposition
+
+    # Mode 2 (hard): fill in CONJUGATED VERB + PREPOSITION
+    # Sentence has ___ ___ (two blanks).
+    hard_sentence = Column(Text, nullable=True)
+    hard_english = Column(Text, nullable=True)
+    hard_correct_verb = Column(String, nullable=True)   # conjugated form used in sentence
+    hard_correct_prep = Column(String, nullable=True)   # always == preposition column
+    hard_explanation = Column(Text, nullable=True)
+
+    # Distractor prepositions (JSON list of 3 strings)
+    prep_distractors = Column(Text, nullable=True)
+
+    # Global aggregate stats
+    times_seen = Column(Integer, default=0, nullable=False)
+    times_correct = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user_stats = relationship("PrepVerbStat", back_populates="pair", cascade="all, delete-orphan")
+    game_answers = relationship("PrepVerbGameAnswer", back_populates="pair")
+
+
+class PrepVerbStat(Base):
+    """Per-user stats for a PrepVerbPair — drives spaced repetition."""
+    __tablename__ = "prep_verb_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    pair_id = Column(Integer, ForeignKey("prep_verb_pairs.id"), nullable=False)
+    times_seen = Column(Integer, default=0, nullable=False)
+    times_correct = Column(Integer, default=0, nullable=False)
+    last_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    needs_review = Column(Boolean, default=False, nullable=False)
+
+    user = relationship("User")
+    pair = relationship("PrepVerbPair", back_populates="user_stats")
+
+
+class PrepVerbGameSession(Base):
+    """One completed fixed-preposition verb game."""
+    __tablename__ = "prep_verb_game_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    played_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    mode = Column(String, nullable=False, default="prep")  # "prep" | "hard"
+    question_count = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)
+    accuracy = Column(Integer, nullable=False)   # 0-100 integer percent
+
+    answers = relationship("PrepVerbGameAnswer", back_populates="session", cascade="all, delete-orphan")
+
+
+class PrepVerbGameAnswer(Base):
+    """One answer within a PrepVerbGameSession."""
+    __tablename__ = "prep_verb_game_answers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("prep_verb_game_sessions.id"), nullable=False)
+    pair_id = Column(Integer, ForeignKey("prep_verb_pairs.id"), nullable=True)
+    mode = Column(String, nullable=False)        # "prep" | "hard"
+    verb = Column(String, nullable=False)
+    preposition = Column(String, nullable=False)
+    sentence = Column(Text, nullable=False)
+    # For prep mode: single correct answer; for hard: "verb preposition"
+    correct_answer = Column(String, nullable=False)
+    user_answer = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    english_hint = Column(Text, nullable=True)
+
+    session = relationship("PrepVerbGameSession", back_populates="answers")
+    pair = relationship("PrepVerbPair", back_populates="game_answers")
+
+
 # --- Pydantic Schemas for Article Words Admin ---
 
 class ArticleWordCreate(BaseModel):

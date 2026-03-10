@@ -900,3 +900,99 @@ Rules:
         except Exception as e:
             logger.error(f"Error generating conjunction question for '{conjunction}': {e}, content: {content!r}")
             raise ProcessingError(f"Failed to generate question for conjunction '{conjunction}': {e}")
+
+    @staticmethod
+    async def generate_prep_verb_question(verb: str, preposition: str, english_translation: str, reflexive: bool) -> dict:
+        """
+        Generate sentences for a Dutch verb+fixed-preposition pair (e.g. "beginnen met").
+
+        Produces data for BOTH game modes in a single LLM call:
+          - Mode "prep":  one blank for the preposition only.
+          - Mode "hard":  two blanks (___ for conjugated verb, ___ for preposition).
+
+        Returns a dict with:
+            verb, preposition, english_translation, reflexive,
+            prep_sentence, prep_english, prep_explanation, prep_distractors,
+            hard_sentence, hard_english, hard_correct_verb, hard_correct_prep, hard_explanation
+        """
+        if not settings.OPENROUTER_API_KEY:
+            raise ProcessingError("OPENROUTER_API_KEY environment variable not set")
+
+        client = OpenRouterService.get_client()
+        reflexive_note = (
+            f'Note: this verb is reflexive — it is used with a reflexive pronoun (e.g. "zich {verb} {preposition}").'
+            if reflexive else ""
+        )
+        pair_display = f'{"zich " if reflexive else ""}{verb} {preposition}'
+        prompt = f"""You are an expert Dutch language teacher creating exercises for the fixed-preposition verb "{pair_display}" (English: "{english_translation}"). {reflexive_note}
+
+Generate TWO fill-in-the-blank sentences and return ONLY a JSON object with exactly these keys:
+
+{{
+  "verb": "{verb}",
+  "preposition": "{preposition}",
+  "english_translation": "{english_translation}",
+
+  "prep_sentence": "A natural Dutch sentence where ONLY the preposition '{preposition}' is replaced by ___. The conjugated verb must appear literally in the sentence.",
+  "prep_english": "English translation of the complete prep_sentence (with '{preposition}' filled in)",
+  "prep_explanation": "1-2 sentences explaining why '{preposition}' is the correct fixed preposition here (not another preposition)",
+  "prep_distractors": ["wrong_prep_1", "wrong_prep_2", "wrong_prep_3"],
+
+  "hard_sentence": "A natural Dutch sentence where the CONJUGATED VERB is replaced by ___VERB___ and the PREPOSITION is replaced by ___PREP___. Use exactly those placeholder tokens.",
+  "hard_english": "English translation of the complete hard_sentence",
+  "hard_correct_verb": "the conjugated verb form used in the sentence (e.g. 'begint', 'concentreren', 'nam deel')",
+  "hard_correct_prep": "{preposition}",
+  "hard_explanation": "1-2 sentences explaining the verb conjugation used and why '{preposition}' is fixed"
+}}
+
+Rules:
+1. Both sentences must be natural, correct Dutch.
+2. prep_sentence: the preposition blank ___ must appear immediately after the verb (or reflexive pronoun if applicable). Do NOT replace the verb itself.
+3. hard_sentence: use exactly ___VERB___ and ___PREP___ as placeholders (not ___). They must appear in the correct positions.
+4. prep_distractors: three OTHER real Dutch prepositions that are plausible but WRONG with this verb (e.g. for "beginnen met", wrong distractors could be "aan", "op", "in").
+5. hard_correct_verb: must be the conjugated form that actually fits the sentence (present tense preferred, but past tense is fine if more natural).
+6. Return ONLY raw JSON — no markdown fences, no extra text.
+"""
+        content = ""
+        try:
+            response = await client.post(
+                "/chat/completions",
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "system", "content": "You are a precise Dutch language teacher. Always return valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 700,
+                },
+            )
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            data = json.loads(content)
+
+            required = [
+                "verb", "preposition",
+                "prep_sentence", "prep_english", "prep_explanation", "prep_distractors",
+                "hard_sentence", "hard_english", "hard_correct_verb", "hard_correct_prep", "hard_explanation",
+            ]
+            for field in required:
+                if field not in data:
+                    raise ProcessingError(f"LLM response missing field: {field}")
+            if "___" not in data["prep_sentence"]:
+                raise ProcessingError("prep_sentence does not contain a blank (___)")
+            if "___VERB___" not in data["hard_sentence"] or "___PREP___" not in data["hard_sentence"]:
+                raise ProcessingError("hard_sentence must contain ___VERB___ and ___PREP___ placeholders")
+            if len(data.get("prep_distractors", [])) < 3:
+                raise ProcessingError("LLM response has fewer than 3 prep_distractors")
+
+            return data
+
+        except ProcessingError:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating prep-verb question for '{pair_display}': {e}, content: {content!r}")
+            raise ProcessingError(f"Failed to generate question for '{pair_display}': {e}")

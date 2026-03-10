@@ -65,6 +65,14 @@
             <p>Master Dutch conjunctions! Complete sentences with the right connecting word and track your progress.</p>
           </router-link>
 
+          <router-link to="/prep-verb-game" class="tool-card">
+            <div class="card-header">
+              <h3>🎯 Preposition Game</h3>
+            </div>
+            <p>Practice Dutch verbs with fixed prepositions — <em>beginnen met, denken aan, houden van</em>. Fill in the
+              preposition or go hard mode and type both!</p>
+          </router-link>
+
           <component :is="auth.isAuthenticated ? 'router-link' : 'div'"
             v-bind="auth.isAuthenticated ? { to: '/word-bank' } : {}" class="tool-card"
             :class="{ 'tool-card--locked': !auth.isAuthenticated }">

@@ -1339,3 +1339,87 @@ def admin_delete_conjunction_sentence(
         raise HTTPException(status_code=404, detail="Sentence not found")
     db.delete(s)
     db.commit()
+
+
+# ===========================================================================
+# Fixed-preposition verb game  (/api/prep-verb-game/*)
+# ===========================================================================
+from app.prep_verb_game_service import (  # noqa: E402
+    PrepVerbGameService,
+    generate_question as _pv_generate_question,
+    PREP_VERB_PAIRS as _PREP_VERB_PAIRS,
+)
+
+
+class PrepVerbQuestionRequest(BaseModel):
+    mode: str = "prep"                        # "prep" | "hard"
+    verb_filter: Optional[str] = None         # limit to a specific verb
+    excluded_pair_ids: Optional[List[int]] = None
+
+
+class PrepVerbSaveRequest(BaseModel):
+    mode: str = "prep"
+    answers: List[dict]
+
+
+@router.post("/prep-verb-game/question")
+async def prep_verb_question(
+    body: PrepVerbQuestionRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user_optional),
+):
+    """Return one question for the fixed-preposition verb game."""
+    if body.mode not in ("prep", "hard"):
+        raise HTTPException(status_code=400, detail="mode must be 'prep' or 'hard'")
+    try:
+        user_id = current_user.id if current_user else 0
+        return await _pv_generate_question(
+            db=db,
+            user_id=user_id,
+            mode=body.mode,
+            verb_filter=body.verb_filter,
+            excluded_pair_ids=body.excluded_pair_ids,
+        )
+    except Exception as e:
+        logger.error(f"prep_verb_question error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prep-verb-game/save")
+def prep_verb_save(
+    body: PrepVerbSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Save a completed fixed-preposition verb game session."""
+    svc = PrepVerbGameService(db, current_user.id)
+    try:
+        session = svc.save_game(body.answers, body.mode)
+        return {
+            "session_id": session.id,
+            "score": session.score,
+            "accuracy": session.accuracy,
+            "question_count": session.question_count,
+        }
+    except Exception as e:
+        logger.error(f"prep_verb_save error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/prep-verb-game/stats")
+def prep_verb_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return stats for the current user's fixed-preposition verb game history."""
+    svc = PrepVerbGameService(db, current_user.id)
+    return svc.get_stats()
+
+
+@router.get("/prep-verb-game/pairs")
+def prep_verb_pairs(_: Session = Depends(get_db)):
+    """Return the full built-in list of verb+preposition pairs (for the setup screen)."""
+    return [
+        {"verb": v, "preposition": p, "english": e, "reflexive": r}
+        for v, p, e, r in _PREP_VERB_PAIRS
+    ]

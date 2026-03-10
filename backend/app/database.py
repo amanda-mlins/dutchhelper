@@ -50,6 +50,17 @@ def _run_migrations():
         except Exception:
             pass  # Column already exists
 
+        # Add prep_verb_pairs, prep_verb_stats, prep_verb_game_sessions,
+        # prep_verb_game_answers tables — created by Base.metadata.create_all,
+        # but ensure reflexive column exists if table was created before it was added.
+        try:
+            conn.execute(text(
+                "ALTER TABLE prep_verb_pairs ADD COLUMN reflexive INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+        except Exception:
+            pass
+
 def get_db():
     """
     Dependency to get a database session.
