@@ -72,7 +72,10 @@
                         <span>Error rate</span>
                     </div>
                     <div v-for="hv in mistakeLeaderboard" :key="hv.verb" class="mt-row">
-                        <span class="mt-word">{{ hv.verb }}</span>
+                        <span class="mt-word">
+                            {{ hv.verb }}
+                            <WordBankButton :word="hv.verb" word-type="verb" category="Verb" />
+                        </span>
                         <span class="mt-count">{{ hv.times_wrong }} / {{ hv.times_seen }}</span>
                         <span class="mt-bar-cell">
                             <div class="mt-bar-wrap">
@@ -120,11 +123,19 @@
                                 <div class="ans-sentence">{{ ans.sentence }}</div>
                                 <div class="ans-verdict">
                                     <span v-if="ans.is_correct" class="verdict-correct">✓ {{ ans.correct_answer
-                                        }}</span>
+                                    }}</span>
                                     <span v-else class="verdict-wrong">
                                         ✗ {{ ans.user_answer }}
                                         <span class="verdict-hint">(correct: {{ ans.correct_answer }})</span>
                                     </span>
+                                </div>
+                                <!-- Word Bank quick-add -->
+                                <div class="wb-quick-row">
+                                    <span class="wb-quick-label">+ Bank:</span>
+                                    <WordBankButton :word="ans.verb_infinitive" word-type="verb" category="Verb"
+                                        :context-sentence="ans.sentence" />
+                                    <WordBankButton v-for="w in extractWords(ans.sentence)" :key="w" :word="w"
+                                        :context-sentence="ans.sentence" />
                                 </div>
                             </div>
                         </div>
@@ -145,8 +156,29 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth.js'
+import WordBankButton from '../components/WordBankButton.vue'
 
 const auth = useAuthStore()
+
+// Dutch stop-words filter
+const STOP_WORDS = new Set([
+    'de', 'het', 'een', 'in', 'op', 'aan', 'te', 'met', 'van', 'voor', 'door', 'over', 'uit', 'bij',
+    'als', 'maar', 'en', 'of', 'dat', 'dit', 'die', 'wat', 'wie', 'hoe', 'waar', 'zijn', 'hebben',
+    'worden', 'is', 'was', 'heeft', 'had', 'wordt', 'werd', 'ik', 'jij', 'je', 'hij', 'zij',
+    'ze', 'wij', 'we', 'jullie', 'u', 'niet', 'ook', 'er', 'al', 'nog', 'meer', 'dan', 'nu',
+    'zo', 'om', 'na', 'tot', 'per', 'af', 'naar', 'toe', 'weg', 'dus', 'toch', 'wel', 'geen',
+    'zich', 'mij', 'hem', 'haar', 'ons', 'hen', 'hun', 'mijn', 'jouw', '__', '___',
+])
+
+function extractWords(sentence) {
+    if (!sentence) return []
+    const raw = sentence
+        .toLowerCase()
+        .replace(/[.,!?;:'"()\[\]{}<>]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !STOP_WORDS.has(w))
+    return [...new Set(raw)]
+}
 
 const stats = ref(null)
 const history = ref([])
@@ -672,6 +704,33 @@ function errorRateClass(pct) {
     font-weight: 400;
     opacity: 0.8;
     font-size: 12px;
+}
+
+/* ── Word Bank quick-add row ──────────────────────────────────────────── */
+.wb-quick-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+}
+
+.wb-quick-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #a0aec0;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-right: 2px;
+}
+
+.mt-word {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* ── Empty state ──────────────────────────────────────────────────────── */

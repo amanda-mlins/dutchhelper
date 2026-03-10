@@ -184,6 +184,15 @@
                     <p v-if="currentQuestion.explanation" class="feedback-explanation">
                         💡 {{ currentQuestion.explanation }}
                     </p>
+                    <!-- ── Word Bank quick-add ── -->
+                    <div v-if="isLoggedIn" class="wb-quick-row">
+                        <span class="wb-quick-label">+ Word Bank:</span>
+                        <WordBankButton :word="currentQuestion.correct_answer" word-type="conjunction"
+                            category="Conjunction"
+                            :context-sentence="currentQuestion.sentence.replace('___', currentQuestion.correct_answer)" />
+                        <WordBankButton v-for="w in currentSentenceWords" :key="w" :word="w"
+                            :context-sentence="currentQuestion.sentence.replace('___', currentQuestion.correct_answer)" />
+                    </div>
                 </div>
 
                 <!-- Next button -->
@@ -234,6 +243,16 @@
                                 Your answer: <span>{{ ans.user_answer || '(blank)' }}</span>
                                 → correct: <strong>{{ ans.correct_answer }}</strong>
                             </p>
+                            <!-- Word Bank quick-add -->
+                            <div v-if="isLoggedIn" class="wb-quick-row">
+                                <span class="wb-quick-label">+ Bank:</span>
+                                <WordBankButton :word="ans.correct_answer" word-type="conjunction"
+                                    category="Conjunction"
+                                    :context-sentence="ans.sentence.replace('___', ans.correct_answer)" />
+                                <WordBankButton
+                                    v-for="w in extractWords(ans.sentence.replace('___', ans.correct_answer))" :key="w"
+                                    :word="w" :context-sentence="ans.sentence.replace('___', ans.correct_answer)" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -250,6 +269,28 @@
 
 <script>
 import { authAxios, useAuthStore } from '../stores/auth.js';
+import WordBankButton from '../components/WordBankButton.vue';
+
+// Dutch stop-words filter (shared logic with VerbGame)
+const STOP_WORDS = new Set([
+    'de', 'het', 'een', 'in', 'op', 'aan', 'te', 'met', 'van', 'voor', 'door', 'over', 'uit', 'bij',
+    'als', 'maar', 'en', 'of', 'dat', 'dit', 'die', 'wat', 'wie', 'hoe', 'waar', 'zijn', 'hebben',
+    'worden', 'is', 'was', 'zijn', 'heeft', 'had', 'wordt', 'werd', 'ik', 'jij', 'je', 'hij', 'zij',
+    'ze', 'wij', 'we', 'jullie', 'u', 'niet', 'ook', 'er', 'al', 'nog', 'meer', 'dan', 'nu', 'al',
+    'zo', 'om', 'na', 'tot', 'per', 'af', 'naar', 'toe', 'weg', 'al', 'dus', 'toch', 'wel', 'geen',
+    'zich', 'mij', 'hem', 'haar', 'ons', 'hen', 'hun', 'hun', 'mijn', 'jouw', 'zijn', 'haar', 'ons',
+    'jullie', '__', '___',
+]);
+
+function extractWords(sentence) {
+    if (!sentence) return [];
+    const raw = sentence
+        .toLowerCase()
+        .replace(/[.,!?;:'"()\[\]{}<>]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+    return [...new Set(raw)];
+}
 
 const ALL_CONJUNCTION_TYPES = [
     { value: 'coordinating', label: '🔵 Coordinating' },
@@ -280,6 +321,7 @@ const DIFFICULTIES = [
 
 export default {
     name: 'ConjunctionGame',
+    components: { WordBankButton },
 
     data() {
         return {
@@ -331,9 +373,17 @@ export default {
                 '<span class="blank">___</span>'
             );
         },
+        currentSentenceWords() {
+            if (!this.currentQuestion) return [];
+            const full = this.currentQuestion.sentence
+                .replace('___', this.currentQuestion.correct_answer || '');
+            return extractWords(full);
+        },
     },
 
     methods: {
+        extractWords,   // expose helper for use in template
+
         formatType(type) {
             const map = {
                 coordinating: '🔵 Coordinating',
@@ -1046,6 +1096,26 @@ export default {
     font-size: 14px;
     line-height: 1.5;
     opacity: 0.9;
+}
+
+/* ── Word Bank quick-add row ─────────────────────────────────────────── */
+.wb-quick-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.12);
+}
+
+.wb-quick-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-right: 2px;
 }
 
 .btn-next {

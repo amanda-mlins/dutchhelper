@@ -679,6 +679,56 @@ class WordBulkCategoryRequest(BaseModel):
     category: Optional[str] = None  # None / "" clears the category
 
 
+class QuickAddWordRequest(BaseModel):
+    word: str
+    word_type: Optional[str] = "word"        # noun / verb / adjective / word / …
+    category: Optional[str] = None           # e.g. "Conjunction", "Verb"
+    context_sentence: Optional[str] = None   # sentence the word appeared in
+
+
+@router.post("/word-bank/words/quick", status_code=200)
+def quick_add_word(
+    body: QuickAddWordRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Fast, no-LLM path: save a single Dutch word to the user's word bank.
+
+    Use this when the word is already known-good (e.g. extracted from a
+    game sentence).  Returns { status: 'added'|'skipped', id }.
+    Duplicates (same word, same user) are silently skipped.
+    """
+    word = body.word.strip().lower()
+    if not word:
+        raise HTTPException(status_code=400, detail="word cannot be empty")
+
+    existing = (
+        db.query(models.UserWord)
+        .filter(models.UserWord.user_id == current_user.id,
+                models.UserWord.word == word)
+        .first()
+    )
+    if existing:
+        return {"status": "skipped", "id": existing.id}
+
+    entry = models.UserWord(
+        user_id=current_user.id,
+        word=word,
+        word_type=body.word_type or "word",
+        category=body.category or None,
+    )
+    entry.set_details(
+        definition="",
+        translation_en="",
+        example=body.context_sentence or "",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return {"status": "added", "id": entry.id}
+
+
 @router.post("/word-bank/words", response_model=models.UserWordSchema, status_code=201)
 async def add_user_word(
     word_data: models.UserWordCreate,
