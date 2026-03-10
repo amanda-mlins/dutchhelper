@@ -697,6 +697,58 @@ async def add_user_word(
         raise HTTPException(status_code=500, detail="Failed to add word. Please try again.")
 
 
+class PrepPairWordBankRequest(BaseModel):
+    pair_ids: List[int]
+
+
+@router.post("/word-bank/words/prep-pairs-bulk", status_code=200)
+def save_prep_pairs_to_word_bank(
+    body: PrepPairWordBankRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Save a list of PrepVerbPair rows directly to the user's word bank —
+    no LLM call needed, we already have the translation and example.
+    Skips pairs that are already saved (matched by word text).
+    Returns { added, skipped }.
+    """
+    import json as _json
+    pairs = db.query(models.PrepVerbPair).filter(models.PrepVerbPair.id.in_(body.pair_ids)).all()
+    added = 0
+    skipped = 0
+    for pair in pairs:
+        # Build canonical word text: "zich beginnen met" or "beginnen met"
+        word_text = f"{'zich ' if pair.reflexive and 'zich' not in pair.verb else ''}{pair.verb} {pair.preposition}".strip()
+        # Check if already in word bank
+        existing = db.query(models.UserWord).filter(
+            models.UserWord.user_id == current_user.id,
+            models.UserWord.word == word_text,
+        ).first()
+        if existing:
+            skipped += 1
+            continue
+        # Build example from prep_sentence if available
+        example = ""
+        if pair.prep_sentence:
+            example = pair.prep_sentence.replace("___", pair.preposition)
+        entry = models.UserWord(
+            user_id=current_user.id,
+            word=word_text,
+            word_type="expression",
+            category="Verb + Preposition",
+        )
+        entry.set_details(
+            definition=f"Fixed-preposition verb: {word_text}",
+            translation_en=pair.english_translation or "",
+            example=example,
+        )
+        db.add(entry)
+        added += 1
+    db.commit()
+    return {"added": added, "skipped": skipped}
+
+
 @router.post("/word-bank/words/bulk")
 async def bulk_add_user_words(
     body: WordBulkAddRequest,

@@ -108,7 +108,8 @@
                 <div class="pair-header">
                     <span class="pair-label">Verb + preposition</span>
                     <span class="pair-badge">
-                        {{ currentQuestion.reflexive ? '' : '' }}{{ currentQuestion.verb }}
+                        {{ currentQuestion.reflexive ? (currentQuestion.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
+                            currentQuestion.verb }}
                         <strong>_______</strong>
                     </span>
                     <span class="pair-en">{{ currentQuestion.english_translation }}</span>
@@ -231,7 +232,7 @@
                             :class="ans.is_correct ? 'review-correct' : 'review-wrong'">
                             <div class="review-top">
                                 <span class="review-pair">
-                                    {{ ans.reflexive ? 'zich ' : '' }}{{ ans.verb }}
+                                    {{ ans.reflexive ? (ans.verb.includes('zich ') ? '' : 'zich ') : '' }}{{ ans.verb }}
                                     <strong>{{ ans.preposition }}</strong>
                                 </span>
                                 <span class="review-icon">{{ ans.is_correct ? '✓' : '✗' }}</span>

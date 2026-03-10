@@ -147,7 +147,7 @@
                         <template v-else>
                             <p class="card-word prep-front-verb">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                currentCard.verb }}
+                                    currentCard.verb }}
                                 <span class="prep-front-prep">{{ currentCard.preposition }}</span>
                             </p>
                         </template>
@@ -256,6 +256,28 @@
                 </button>
                 <button class="btn-secondary" @click="screen = 'setup'">⚙️ Change selection</button>
             </div>
+
+            <!-- ── Save to Word Bank (prep-verbs mode only) ── -->
+            <div v-if="allPrepCards.length" class="save-to-bank-section">
+                <h3>📚 Save to Word Bank</h3>
+                <p class="save-to-bank-desc">
+                    Add these verb+preposition pairs to your personal Word Bank for extra practice.
+                </p>
+                <div class="save-to-bank-options">
+                    <button class="btn-bank btn-bank-all" @click="saveToWordBank('all')" :disabled="isSavingToBank">
+                        <span>💾 Save all {{ allPrepCards.length }} pairs</span>
+                    </button>
+                    <button v-if="wrongPrepCards.length" class="btn-bank btn-bank-mistakes"
+                        @click="saveToWordBank('mistakes')" :disabled="isSavingToBank">
+                        <span>⚠️ Save only mistakes ({{ wrongPrepCards.length }})</span>
+                    </button>
+                </div>
+                <p v-if="isSavingToBank" class="save-status">Saving…</p>
+                <p v-else-if="savedToBankMsg" class="save-status"
+                    :class="savedToBankMsg.startsWith('✓') ? 'save-ok' : 'save-err'">
+                    {{ savedToBankMsg }}
+                </p>
+            </div>
         </div>
 
     </div>
@@ -293,6 +315,8 @@ export default {
 
             // ----- results -----
             // computed from ratings at end of session
+            isSavingToBank: false,
+            savedToBankMsg: null,
         };
     },
 
@@ -340,6 +364,15 @@ export default {
         wrongWords() {
             // Works for both word-bank cards (have .word) and prep-pair cards (have .verb)
             return this.deck.filter(w => this.ratings[this._cardKey(w)] === false);
+        },
+
+        /** All prep-pair cards in the current deck (only populated in prep-verbs mode) */
+        allPrepCards() {
+            return this.deck.filter(c => c._prepCard);
+        },
+        /** Prep-pair cards the user got wrong */
+        wrongPrepCards() {
+            return this.wrongWords.filter(c => c._prepCard);
         },
     },
 
@@ -426,6 +459,7 @@ export default {
             this.currentIndex = 0;
             this.isFlipped = false;
             this.ratings = {};
+            this.savedToBankMsg = null;
             this.screen = 'study';
             this.$nextTick(() => this.$refs.studyEl?.focus());
         },
@@ -517,6 +551,27 @@ export default {
             this.ratings = {};
             this.screen = 'study';
             this.$nextTick(() => this.$refs.studyEl?.focus());
+        },
+
+        async saveToWordBank(which) {
+            // which: 'all' | 'mistakes'
+            const cards = which === 'all' ? this.allPrepCards : this.wrongPrepCards;
+            if (!cards.length) return;
+            this.isSavingToBank = true;
+            this.savedToBankMsg = null;
+            try {
+                const { data } = await authAxios.post('/api/word-bank/words/prep-pairs-bulk', {
+                    pair_ids: cards.map(c => c.id).filter(Boolean),
+                });
+                const { added, skipped } = data;
+                this.savedToBankMsg = added
+                    ? `✓ Saved ${added} pair${added !== 1 ? 's' : ''} to your Word Bank${skipped ? ` (${skipped} already there)` : ''}.`
+                    : `All ${skipped} pair${skipped !== 1 ? 's' : ''} already in your Word Bank.`;
+            } catch {
+                this.savedToBankMsg = '✗ Could not save — are you logged in?';
+            } finally {
+                this.isSavingToBank = false;
+            }
         },
     },
 
@@ -1250,6 +1305,80 @@ kbd {
 .review-chip-prep {
     color: #667eea;
     margin-left: 2px;
+}
+
+/* ── Save to Word Bank ──────────────────────────────────────────────────── */
+.save-to-bank-section {
+    margin-top: 32px;
+    padding: 24px;
+    background: #f8f9ff;
+    border: 1px solid #dde3ff;
+    border-radius: 16px;
+    text-align: center;
+}
+
+.save-to-bank-section h3 {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.save-to-bank-desc {
+    font-size: 14px;
+    color: #666;
+    margin: 0 0 18px;
+}
+
+.save-to-bank-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.btn-bank {
+    padding: 11px 22px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn-bank:hover:not(:disabled) {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+.btn-bank:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-bank-all {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+}
+
+.btn-bank-mistakes {
+    background: #fff5f5;
+    border: 2px solid #f87171;
+    color: #b91c1c;
+}
+
+.save-status {
+    margin: 12px 0 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.save-ok {
+    color: #15803d;
+}
+
+.save-err {
+    color: #b91c1c;
 }
 
 /* ── Mobile tweaks ──────────────────────────────────────────────────────── */
