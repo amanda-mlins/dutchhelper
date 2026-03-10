@@ -697,8 +697,22 @@ async def add_user_word(
         raise HTTPException(status_code=500, detail="Failed to add word. Please try again.")
 
 
+class PrepPairWordBankItem(BaseModel):
+    """Either a DB pair (id set) or a raw stub (id=None, verb/preposition/english provided)."""
+    id: Optional[int] = None
+    verb: Optional[str] = None
+    preposition: Optional[str] = None
+    english_translation: Optional[str] = None
+    reflexive: Optional[bool] = False
+
+
 class PrepPairWordBankRequest(BaseModel):
-    pair_ids: List[int]
+    pairs: List[PrepPairWordBankItem]
+
+
+def _word_text_for_pair(verb: str, preposition: str, reflexive: bool) -> str:
+    prefix = "zich " if reflexive and "zich" not in verb else ""
+    return f"{prefix}{verb} {preposition}".strip()
 
 
 @router.post("/word-bank/words/prep-pairs-bulk", status_code=200)
@@ -708,19 +722,43 @@ def save_prep_pairs_to_word_bank(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Save a list of PrepVerbPair rows directly to the user's word bank —
-    no LLM call needed, we already have the translation and example.
-    Skips pairs that are already saved (matched by word text).
-    Returns { added, skipped }.
+    Save a list of prep-verb pairs to the user's word bank.
+    Accepts either DB-row pairs (id set) or raw stubs (id=None with verb/prep/english).
+    Skips duplicates matched by word text. Returns { added, skipped }.
     """
-    import json as _json
-    pairs = db.query(models.PrepVerbPair).filter(models.PrepVerbPair.id.in_(body.pair_ids)).all()
     added = 0
     skipped = 0
-    for pair in pairs:
-        # Build canonical word text: "zich beginnen met" or "beginnen met"
-        word_text = f"{'zich ' if pair.reflexive and 'zich' not in pair.verb else ''}{pair.verb} {pair.preposition}".strip()
-        # Check if already in word bank
+
+    for item in body.pairs:
+        # Resolve data — prefer DB row if id is set
+        if item.id is not None:
+            db_pair = db.query(models.PrepVerbPair).filter(models.PrepVerbPair.id == item.id).first()
+            if db_pair:
+                verb = db_pair.verb
+                preposition = db_pair.preposition
+                reflexive = db_pair.reflexive
+                english = db_pair.english_translation or item.english_translation or ""
+                example = db_pair.prep_sentence.replace("___", db_pair.preposition) if db_pair.prep_sentence else ""
+            else:
+                # id provided but not found — fall back to inline data
+                verb = item.verb or ""
+                preposition = item.preposition or ""
+                reflexive = item.reflexive or False
+                english = item.english_translation or ""
+                example = ""
+        else:
+            # Pure stub from built-in catalogue
+            verb = item.verb or ""
+            preposition = item.preposition or ""
+            reflexive = item.reflexive or False
+            english = item.english_translation or ""
+            example = ""
+
+        if not verb or not preposition:
+            continue
+
+        word_text = _word_text_for_pair(verb, preposition, reflexive)
+
         existing = db.query(models.UserWord).filter(
             models.UserWord.user_id == current_user.id,
             models.UserWord.word == word_text,
@@ -728,10 +766,7 @@ def save_prep_pairs_to_word_bank(
         if existing:
             skipped += 1
             continue
-        # Build example from prep_sentence if available
-        example = ""
-        if pair.prep_sentence:
-            example = pair.prep_sentence.replace("___", pair.preposition)
+
         entry = models.UserWord(
             user_id=current_user.id,
             word=word_text,
@@ -740,11 +775,12 @@ def save_prep_pairs_to_word_bank(
         )
         entry.set_details(
             definition=f"Fixed-preposition verb: {word_text}",
-            translation_en=pair.english_translation or "",
+            translation_en=english,
             example=example,
         )
         db.add(entry)
         added += 1
+
     db.commit()
     return {"added": added, "skipped": skipped}
 
