@@ -31,7 +31,7 @@ class Settings(BaseSettings):
         description="OpenRouter API endpoint"
     )
     LLM_MODEL: str = Field(
-        default="google/gemini-2.5-flash-lite-preview-09-2025",
+        default="google/gemini-3-flash-preview",
         description="LLM model to use"
     )
 

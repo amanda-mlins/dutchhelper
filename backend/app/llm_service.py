@@ -948,7 +948,7 @@ Generate TWO fill-in-the-blank sentences and return ONLY a JSON object with exac
 Rules:
 1. Both sentences must be natural, correct Dutch.
 2. prep_sentence: the preposition blank ___ must appear immediately after the verb (or reflexive pronoun if applicable). Do NOT replace the verb itself.
-3. hard_sentence: use exactly ___VERB___ and ___PREP___ as placeholders (not ___). They must appear in the correct positions.
+3. hard_sentence: use exactly ___VERB___ and ___PREP___ as placeholders (not ___). They must appear in the correct positions. If you are not able to fulfill the hard_sentence requirements, return an error instead of making up a sentence.
 4. prep_distractors: three OTHER real Dutch prepositions that are plausible but WRONG with this verb (e.g. for "beginnen met", wrong distractors could be "aan", "op", "in").
 5. hard_correct_verb: must be the conjugated form that actually fits the sentence (present tense preferred, but past tense is fine if more natural).
 6. Return ONLY raw JSON — no markdown fences, no extra text.
@@ -985,7 +985,7 @@ Rules:
             if "___" not in data["prep_sentence"]:
                 raise ProcessingError("prep_sentence does not contain a blank (___)")
             if "___VERB___" not in data["hard_sentence"] or "___PREP___" not in data["hard_sentence"]:
-                raise ProcessingError(f"hard_sentence must contain ___VERB___ and ___PREP___ placeholders: {data['hard_sentence']!r}")
+                raise ProcessingError(f"hard_sentence must contain ___VERB___ and ___PREP___ placeholders: {data['hard_sentence']}")
             if len(data.get("prep_distractors", [])) < 3:
                 raise ProcessingError("LLM response has fewer than 3 prep_distractors")
 
