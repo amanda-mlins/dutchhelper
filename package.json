@@ -1,0 +1,12 @@
+{
+  "name": "dutchhelper",
+  "version": "1.0.0",
+  "description": "Root package — manages Git hooks via husky. App code lives in backend/ and frontend/.",
+  "private": true,
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

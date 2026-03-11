@@ -1,0 +1,92 @@
+#!/usr/bin/env sh
+# ─────────────────────────────────────────────────────────────────────────────
+# pre-push hook — mirrors the CI pipeline checks locally.
+# Runs automatically on every `git push`.
+# To skip in an emergency: git push --no-verify
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -e   # abort immediately if any check fails
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # no colour
+
+pass() { printf "${GREEN}✔ %s${NC}\n" "$1"; }
+fail() { printf "${RED}✘ %s${NC}\n" "$1"; }
+info() { printf "${YELLOW}▶ %s${NC}\n" "$1"; }
+
+echo ""
+echo "═══════════════════════════════════════════════"
+echo "  Pre-push checks (mirrors CI pipeline)"
+echo "═══════════════════════════════════════════════"
+echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BACKEND
+# ─────────────────────────────────────────────────────────────────────────────
+info "BACKEND"
+
+cd "$REPO_ROOT/backend"
+
+# Locate the Python interpreter inside the venv
+PYTHON="$REPO_ROOT/backend/bin/python"
+if [ ! -x "$PYTHON" ]; then
+    # Fall back to whatever python3 is on PATH
+    PYTHON="$(command -v python3 || true)"
+fi
+if [ -z "$PYTHON" ]; then
+    fail "No Python interpreter found. Make sure the venv is set up."
+    exit 1
+fi
+
+# Locate ruff binary (installed globally/conda, not necessarily in the venv)
+RUFF="$(command -v ruff || true)"
+if [ -z "$RUFF" ]; then
+    fail "ruff not found on PATH. Install with: pip install ruff  or  conda install ruff"
+    exit 1
+fi
+
+# Ruff lint
+info "Running ruff lint (app/)…"
+if "$RUFF" check app/; then
+    pass "Ruff lint passed"
+else
+    fail "Ruff lint failed — fix errors before pushing"
+    exit 1
+fi
+
+# Pytest
+info "Running pytest (tests/)…"
+if "$PYTHON" -m pytest tests/ -q --tb=short; then
+    pass "Pytest passed"
+else
+    fail "Pytest failed — fix failing tests before pushing"
+    exit 1
+fi
+
+echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FRONTEND
+# ─────────────────────────────────────────────────────────────────────────────
+info "FRONTEND"
+
+cd "$REPO_ROOT/frontend"
+
+info "Running vite build…"
+if npm run build --silent; then
+    pass "Frontend build passed"
+    # Clean up the local dist so it doesn't accidentally get committed
+    rm -rf dist/
+else
+    fail "Frontend build failed — fix errors before pushing"
+    exit 1
+fi
+
+echo ""
+echo "═══════════════════════════════════════════════"
+printf "${GREEN}  All checks passed — pushing.${NC}\n"
+echo "═══════════════════════════════════════════════"
+echo ""
