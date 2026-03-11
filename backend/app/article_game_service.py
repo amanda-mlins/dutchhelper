@@ -310,31 +310,42 @@ class ArticleGameService:
                 user_answer=ans.get("user_answer", ""),
                 is_correct=bool(ans.get("is_correct")),
             ))
-            self._update_mistake(ans.get("word", ""), bool(ans.get("is_correct")))
+
+        # Bulk-fetch all existing mistake rows for the words in this game
+        # in a single query, then update/insert in Python — no N+1.
+        words_in_game = [ans.get("word", "") for ans in answers]
+        existing_rows = (
+            self.db.query(models.ArticleWordMistake)
+            .filter(
+                models.ArticleWordMistake.user_id == self.user_id,
+                models.ArticleWordMistake.word.in_(words_in_game),
+            )
+            .all()
+        )
+        mistake_map = {r.word: r for r in existing_rows}
+
+        now = datetime.now(timezone.utc)
+        for ans in answers:
+            word = ans.get("word", "")
+            is_correct = bool(ans.get("is_correct"))
+            row = mistake_map.get(word)
+            if row is None:
+                row = models.ArticleWordMistake(
+                    user_id=self.user_id,
+                    word=word,
+                    times_seen=0,
+                    times_wrong=0,
+                )
+                self.db.add(row)
+                mistake_map[word] = row
+            row.times_seen += 1
+            if not is_correct:
+                row.times_wrong += 1
+            row.last_seen_at = now
 
         self.db.commit()
         self.db.refresh(session)
         return session
-
-    def _update_mistake(self, word: str, is_correct: bool) -> None:
-        row = (
-            self.db.query(models.ArticleWordMistake)
-            .filter_by(user_id=self.user_id, word=word)
-            .first()
-        )
-        if row is None:
-            row = models.ArticleWordMistake(
-                user_id=self.user_id,
-                word=word,
-                times_seen=0,
-                times_wrong=0,
-            )
-            self.db.add(row)
-
-        row.times_seen += 1
-        if not is_correct:
-            row.times_wrong += 1
-        row.last_seen_at = datetime.now(timezone.utc)
 
     # ------------------------------------------------------------------
     # Stats

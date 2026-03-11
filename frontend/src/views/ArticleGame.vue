@@ -136,7 +136,18 @@
                     :class="{ correct: feedback.is_correct, wrong: !feedback.is_correct }">
                     <p class="feedback-text">{{ feedback.is_correct ? '✓ Correct!' : '✗ Wrong!' }}</p>
                     <p class="feedback-answer">Correct: <strong>{{ feedback.correct_article }} {{ currentWord.word
-                            }}</strong></p>
+                    }}</strong></p>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════════
+                 SAVING PHASE
+            ══════════════════════════════════════════════ -->
+            <div v-else-if="gamePhase === 'saving'" class="game-saving">
+                <div class="saving-card">
+                    <div class="saving-spinner"></div>
+                    <p class="saving-title">Saving your game…</p>
+                    <p class="saving-sub">Updating your progress and mistake history</p>
                 </div>
             </div>
 
@@ -324,14 +335,16 @@ async function endGame() {
     finalAccuracy.value = total ? (score / total) * 100 : 0
     mistakes.value = gameAnswers.value.filter(a => !a.is_correct)
 
-    // Only save if logged in
+    // Only save if logged in — show a saving spinner while we wait
     if (auth.isAuthenticated) {
+        gamePhase.value = 'saving'
         try {
             let authAxios = auth.getAuthAxios()
             await authAxios.post('/api/game/save', { answers: gameAnswers.value })
             await loadStats()   // refresh stats panel for next setup screen
         } catch (e) {
             console.error('Failed to save game', e)
+            // Still proceed to results even if save fails
         }
     }
 
@@ -959,6 +972,51 @@ function playAgain() {
     font-size: 13px;
     color: #38a169;
     font-style: italic;
+}
+
+/* ── Saving phase ── */
+.game-saving {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+}
+
+.saving-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 48px 40px;
+    text-align: center;
+}
+
+.saving-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e2e8f0;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.saving-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    margin: 0;
+}
+
+.saving-sub {
+    font-size: 14px;
+    color: #888;
+    margin: 0;
 }
 
 .results-actions {
