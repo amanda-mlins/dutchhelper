@@ -1579,7 +1579,7 @@ def prep_verb_pairs(db: Session = Depends(get_db)):
             "prep_explanation": p.prep_explanation,
         })
     # Stubs for built-in pairs not yet in DB
-    for v, p, e, r in _PREP_VERB_PAIRS:
+    for v, p, e, r, s in _PREP_VERB_PAIRS:
         if (v, p) not in db_keys:
             result.append({
                 "id": None,
@@ -1587,7 +1587,7 @@ def prep_verb_pairs(db: Session = Depends(get_db)):
                 "preposition": p,
                 "english_translation": e,
                 "reflexive": r,
-                "prep_sentence": None,
+                "prep_sentence": s,
                 "prep_english": None,
                 "prep_explanation": None,
             })

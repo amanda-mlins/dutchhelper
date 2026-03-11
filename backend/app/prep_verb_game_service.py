@@ -36,92 +36,92 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Built-in verb+preposition pair list
 # ---------------------------------------------------------------------------
-# Each entry: (verb_infinitive, preposition, english_translation, reflexive)
+# Each entry: (verb_infinitive, preposition, english_translation, reflexive, example sentence)
 PREP_VERB_PAIRS: List[tuple] = [
     # ── A ──
-    ("aandringen", "op", "to insist on", False),
-    ("afhangen", "van", "to depend on", False),
-    ("antwoorden", "op", "to answer/respond to", False),
+    ("aandringen", "op", "to insist on", False, "Ze dringt aan op een snelle beslissing. → She insists on a quick decision."),
+    ("afhangen", "van", "to depend on", False, "Het hangt af van het weer. → It depends on the weather."),
+    ("antwoorden", "op", "to answer/respond to", False, "Hij antwoordt op de vraag. → He answers the question."),
     # ── B ──
-    ("bang zijn", "voor", "to be afraid of", False),
-    ("bedanken", "voor", "to thank for", False),
-    ("beginnen", "met", "to begin with / start", False),
-    ("benieuwd zijn", "naar", "to be curious about", False),
-    ("bestaan", "uit", "to consist of", False),
-    ("bijdragen", "aan", "to contribute to", False),
-    ("blij zijn", "met", "to be happy with", False),
+    ("bang zijn", "voor", "to be afraid of", False, "Ze is bang voor spinnen. → She is afraid of spiders."),
+    ("bedanken", "voor", "to thank for", False, "Ik wil je bedanken voor je hulp. → I want to thank you for your help."),
+    ("beginnen", "met", "to begin with / start", False, "Hij begint met zijn werk. → He starts with his work."),
+    ("benieuwd zijn", "naar", "to be curious about", False, "Ik ben benieuwd naar het resultaat. → I'm curious about the result."),
+    ("bestaan", "uit", "to consist of", False, "Het team bestaat uit vijf leden. → The team consists of five members."),
+    ("bijdragen", "aan", "to contribute to", False, "Hij draagt bij aan het project. → He contributes to the project."),
+    ("blij zijn", "met", "to be happy with", False, "Ze is blij met haar nieuwe baan. → She is happy with her new job."),
     # ── D ──
-    ("deelnemen", "aan", "to participate in", False),
-    ("denken", "aan", "to think about", False),
-    ("dromen", "van", "to dream of", False),
+    ("deelnemen", "aan", "to participate in", False, "Hij neemt deel aan de vergadering. → He participates in the meeting."),
+    ("denken", "aan", "to think about", False, "Ik denk aan mijn vakantie. → I'm thinking about my vacation."),
+    ("dromen", "van", "to dream of", False, "Ze droomt van een wereldreis. → She dreams of a world trip."),
     # ── G ──
-    ("geloven", "in", "to believe in", False),
-    ("geïnteresseerd zijn", "in", "to be interested in", False),
+    ("geloven", "in", "to believe in", False, "Ik geloof in gelijkheid. → I believe in equality."),
+    ("geïnteresseerd zijn", "in", "to be interested in", False, "Ze is geïnteresseerd in kunst. → She is interested in art."),
     # ── H ──
-    ("helpen", "met", "to help with", False),
-    ("hopen", "op", "to hope for", False),
-    ("houden", "van", "to love / like", False),
+    ("helpen", "met", "to help with", False, "Kun je me helpen met mijn huiswerk? → Can you help me with my homework?"),
+    ("hopen", "op", "to hope for", False, "Ik hoop op goed weer morgen. → I hope for good weather tomorrow."),
+    ("houden", "van", "to love / like", False, "Ik houd van chocolade. → I love chocolate."),
     # ── I ──
-    ("informeren", "naar", "to ask about / inquire about", False),
+    ("informeren", "naar", "to ask about / inquire about", False, "Ik wil graag informeren naar de openingstijden. → I would like to ask about the opening hours."),
     # ── K ──
-    ("kijken", "naar", "to look at / watch", False),
-    ("klagen", "over", "to complain about", False),
+    ("kijken", "naar", "to look at / watch", False, "We kijken naar een film. → We are watching a movie."),
+    ("klagen", "over", "to complain about", False, "Hij klaagt over het lawaai. → He complains about the noise."),
     # ── L ──
-    ("lachen", "om", "to laugh at / about", False),
-    ("lijden", "aan", "to suffer from", False),
-    ("luisteren", "naar", "to listen to", False),
+    ("lachen", "om", "to laugh at / about", False, "Ze lachen om de grap. → They laugh at the joke."),
+    ("lijden", "aan", "to suffer from", False, "Hij lijdt aan een zeldzame ziekte. → He suffers from a rare disease."),
+    ("luisteren", "naar", "to listen to", False, "Ik luister naar muziek. → I listen to music."),
     # ── N ──
-    ("nadenken", "over", "to think about / reflect on", False),
+    ("nadenken", "over", "to think about / reflect on", False, "Ik moet even nadenken over je voorstel. → I need to think about your proposal."),
     # ── O ──
-    ("omgaan", "met", "to deal with / handle", False),
-    ("ophouden", "met", "to stop / quit", False),
+    ("omgaan", "met", "to deal with / handle", False, "Ze kan goed omgaan met stress. → She can handle stress well."),
+    ("ophouden", "met", "to stop / quit", False, "Hij houdt op met roken. → He quits smoking."),
     # ── P ──
-    ("praten", "over", "to talk about", False),
-    ("protesteren", "tegen", "to protest against", False),
+    ("praten", "over", "to talk about", False, "We praten over onze plannen. → We are talking about our plans."),
+    ("protesteren", "tegen", "to protest against", False, "Ze protesteren tegen de nieuwe wet. → They are protesting against the new law."),
     # ── R ──
-    ("reageren", "op", "to react to / respond to", False),
-    ("rekenen", "op", "to count on / rely on", False),
+    ("reageren", "op", "to react to / respond to", False, "Hij reageert op het nieuws. → He reacts to the news."),
+    ("rekenen", "op", "to count on / rely on", False, "Je kunt op me rekenen. → You can count on me."),
     # ── S ──
-    ("schrikken", "van", "to be startled by", False),
-    ("slagen", "voor", "to pass (an exam)", False),
-    ("spelen", "met", "to play with", False),
-    ("stoppen", "met", "to stop / quit", False),
+    ("schrikken", "van", "to be startled by", False, "Ik schrik van harde geluiden. → I am startled by loud noises."),
+    ("slagen", "voor", "to pass (an exam)", False, "Hij is geslaagd voor zijn rijexamen. → He passed his driving test."),
+    ("spelen", "met", "to play with", False, "De kinderen spelen met hun speelgoed. → The children are playing with their toys."),
+    ("stoppen", "met", "to stop / quit", False, "Hij stopt met roken. → He quits smoking."),
     # ── T ──
-    ("teleurgesteld zijn", "in", "to be disappointed in", False),
-    ("terugkomen", "op", "to return to / come back to", False),
-    ("twijfelen", "aan", "to doubt", False),
+    ("teleurgesteld zijn", "in", "to be disappointed in", False, "Ze is teleurgesteld in haar resultaten. → She is disappointed in her results."),
+    ("terugkomen", "op", "to return to / come back to", False, "Hij komt terug op zijn beslissing. → He comes back to his decision."),
+    ("twijfelen", "aan", "to doubt", False, "Ik twijfel aan zijn verhaal. → I doubt his story."),
     # ── V ──
-    ("verlangen", "naar", "to long for", False),
-    ("vertrouwen", "op", "to trust / rely on", False),
-    ("vragen", "om", "to ask for", False),
-    ("vriendelijk zijn", "voor", "to be kind to", False),
+    ("verlangen", "naar", "to long for", False, "Ze verlangt naar een vakantie. → She longs for a vacation."),
+    ("vertrouwen", "op", "to trust / rely on", False, "Ik vertrouw op jouw oordeel. → I trust your judgment."),
+    ("vragen", "om", "to ask for", False, "Ik vraag om hulp. → I ask for help."),
+    ("vriendelijk zijn", "voor", "to be kind to", False, "Wees vriendelijk voor anderen. → Be kind to others."),
     # ── W ──
-    ("werken", "aan", "to work on", False),
-    ("wijzen", "op", "to point out", False),
+    ("werken", "aan", "to work on", False, "Hij werkt aan een nieuw project. → He is working on a new project."),
+    ("wijzen", "op", "to point out", False, "Hij wijst op de fout. → He points out the mistake."),
     # ── Z ──
-    ("zorgen", "voor", "to take care of / provide for", False),
+    ("zorgen", "voor", "to take care of / provide for", False, "Ze zorgt voor haar kinderen. → She takes care of her children."),
     # ── Reflexive ──
-    ("zich aanpassen", "aan", "to adapt to", True),
-    ("zich afvragen", "of", "to wonder if", True),
-    ("zich baseren", "op", "to be based on", True),
-    ("zich bezighouden", "met", "to occupy oneself with", True),
-    ("zich concentreren", "op", "to concentrate on", True),
-    ("zich herinneren", "aan", "to remember", True),
-    ("zich interesseren", "voor", "to be interested in", True),
-    ("zich neerleggen", "bij", "to accept / resign oneself to", True),
-    ("zich richten", "op", "to focus on", True),
-    ("zich verheugen", "op", "to look forward to", True),
-    ("zich vergissen", "in", "to be mistaken about", True),
-    ("zich verzetten", "tegen", "to oppose / resist", True),
-    ("zich voorbereiden", "op", "to prepare for", True),
+    ("zich aanpassen", "aan", "to adapt to", True, "Je moet je aanpassen aan nieuwe situaties. → You have to adapt to new situations."),
+    ("zich afvragen", "of", "to wonder if", True, "Ik vraag me af of hij komt. → I wonder if he is coming."),
+    ("zich baseren", "op", "to be based on", True, "Zijn theorie is gebaseerd op onderzoek. → His theory is based on research."),
+    ("zich bezighouden", "met", "to occupy oneself with", True, "Ze houdt zich bezig met vrijwilligerswerk. → She occupies herself with volunteer work."),
+    ("zich concentreren", "op", "to concentrate on", True, "Je moet je concentreren op je studie. → You need to concentrate on your studies."),
+    ("zich herinneren", "aan", "to remember", True, "Ik herinner me dat moment nog goed. → I still remember that moment well."),
+    ("zich interesseren", "voor", "to be interested in", True, "Hij interesseert zich voor geschiedenis. → He is interested in history."),
+    ("zich neerleggen", "bij", "to accept / resign oneself to", True, "Je moet je neerleggen bij de situatie. → You have to accept the situation."),
+    ("zich richten", "op", "to focus on", True, "We richten ons op het verbeteren van de service. → We are focusing on improving the service."),
+    ("zich verheugen", "op", "to look forward to", True, "Ik verheug me op het feest. → I'm looking forward to the party."),
+    ("zich vergissen", "in", "to be mistaken about", True, "Je vergist je in de datum. → You are mistaken about the date."),
+    ("zich verzetten", "tegen", "to oppose / resist", True, "Ze verzetten zich tegen de plannen. → They are opposing the plans."),
+    ("zich voorbereiden", "op", "to prepare for", True, "We bereiden ons voor op de presentatie. → We are preparing for the presentation."),
 ]
 
 # Unique prepositions in the pool (for distractor selection)
-_ALL_PREPOSITIONS = sorted({p for _, p, _, _ in PREP_VERB_PAIRS})
+_ALL_PREPOSITIONS = sorted({p for _, p, _, _, _ in PREP_VERB_PAIRS})
 
-# Lookup verb → (preposition, english, reflexive)
-_PAIR_LOOKUP: Dict[str, tuple] = {v: (p, e, r) for v, p, e, r in PREP_VERB_PAIRS}
-
+# Lookup verb → (preposition, english, reflexive, sentence)
+_PAIR_LOOKUP: Dict[str, tuple] = {v: (p, e, r, s) for v, p, e, r, s in PREP_VERB_PAIRS}
+    
 
 # ---------------------------------------------------------------------------
 # Helpers

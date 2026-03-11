@@ -985,7 +985,7 @@ Rules:
             if "___" not in data["prep_sentence"]:
                 raise ProcessingError("prep_sentence does not contain a blank (___)")
             if "___VERB___" not in data["hard_sentence"] or "___PREP___" not in data["hard_sentence"]:
-                raise ProcessingError("hard_sentence must contain ___VERB___ and ___PREP___ placeholders")
+                raise ProcessingError(f"hard_sentence must contain ___VERB___ and ___PREP___ placeholders: {data['hard_sentence']!r}")
             if len(data.get("prep_distractors", [])) < 3:
                 raise ProcessingError("LLM response has fewer than 3 prep_distractors")
 
