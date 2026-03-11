@@ -10,8 +10,8 @@ Security design:
 - Tokens include a 'type' claim to prevent refresh tokens being used as access tokens.
 """
 import hashlib
-import hmac
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -55,7 +55,6 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 # Password strength validation
 # ---------------------------------------------------------------------------
-import re
 
 _PASSWORD_RULES = [
     (lambda p: len(p) >= 12,              "at least 12 characters"),

@@ -2,9 +2,11 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Request, Depends, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from app.verb_game_service import VerbGameService, generate_question, DEFAULT_VERB_POOL
+from app.conjunction_game_service import ConjunctionGameService, generate_question as conj_generate_question
+
 from app.schemas import (
     Message, 
     TextAnalysisRequest, 
@@ -39,6 +41,7 @@ class GameWordResponse(BaseModel):
 class GameWordsRequest(BaseModel):
     """Request model for getting game words."""
     count: int = 20
+    mode: str = "smart"   # smart | mistakes | wordbank | random  (ignored for guests)
     personalized: bool = True
 
 class SubmitAnswerRequest(BaseModel):
@@ -305,18 +308,6 @@ async def export_database(
 # Article Game Endpoints
 # ============================================================================
 
-class GameWordsRequest(BaseModel):
-    count: int = 20
-    mode: str = "smart"   # smart | mistakes | wordbank | random  (ignored for guests)
-
-class SubmitAnswerRequest(BaseModel):
-    word: str
-    user_answer: str
-
-class SaveGameRequest(BaseModel):
-    answers: List[dict]
-
-
 @router.post("/game/words")
 def api_get_game_words(
     body: GameWordsRequest,
@@ -397,8 +388,6 @@ def api_get_game_history(
 # ============================================================================
 # Verb Game Endpoints
 # ============================================================================
-
-from app.verb_game_service import VerbGameService, generate_question, DEFAULT_VERB_POOL
 
 class VerbGameQuestionRequest(BaseModel):
     verb: Optional[str] = None            # Specific verb; omit to pick randomly
@@ -525,8 +514,6 @@ def api_verb_game_history(
 # ============================================================================
 # Conjunction Game Endpoints
 # ============================================================================
-
-from app.conjunction_game_service import ConjunctionGameService, generate_question as conj_generate_question, CONJUNCTION_POOL
 
 class ConjunctionGameQuestionRequest(BaseModel):
     conjunction: Optional[str] = None              # Specific conjunction; omit to pick randomly
@@ -1278,7 +1265,7 @@ async def admin_lookup_verb(
     if not infinitive:
         raise HTTPException(status_code=400, detail="infinitive cannot be empty")
     try:
-        conjugation_data = await VerbConjugationService.conjugate_verb_with_llm(infinitive)
+        await VerbConjugationService.conjugate_verb_with_llm(infinitive)
     except Exception as e:
         logger.error(f"Admin verb lookup failed for '{infinitive}': {e}")
         raise HTTPException(status_code=500, detail=f"LLM lookup failed: {e}")

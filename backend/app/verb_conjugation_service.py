@@ -1,7 +1,6 @@
 """Verb conjugation service for Dutch verbs"""
 import logging
-import asyncio
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ class VerbConjugationService:
             logger.warning(f"[VALIDATION] Examples should be array with at least 1 item, got {len(examples)}")
             return False
         
-        logger.debug(f"[VALIDATION] Conjugation data passed all validations")
+        logger.debug("[VALIDATION] Conjugation data passed all validations")
         return True
     
     @staticmethod

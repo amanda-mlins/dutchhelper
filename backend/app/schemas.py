@@ -1,7 +1,6 @@
 """Pydantic models and schemas for request/response validation"""
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
-import re
 
 
 class Message(BaseModel):

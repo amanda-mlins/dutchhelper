@@ -1,7 +1,5 @@
 """LLM service for OpenRouter integration"""
 import logging
-import os
-from fastapi.exceptions import ResponseValidationError
 import httpx
 import json
 from typing import Optional, List
@@ -286,7 +284,7 @@ Return ONLY the JSON object - no additional text, explanations, or commentary.""
             json_end = content.rfind('}') + 1
             
             if json_start == -1 or json_end == 0:
-                logger.warning(f"[OpenRouter] Could not find JSON in LLM response")
+                logger.warning("[OpenRouter] Could not find JSON in LLM response")
                 return [], None
             
             json_str = content[json_start:json_end]
@@ -299,10 +297,10 @@ Return ONLY the JSON object - no additional text, explanations, or commentary.""
             # Validate against schema (using class constant ANALYSIS_RESPONSE_SCHEMA)
             try:
                 validate(instance=response_data, schema=OpenRouterService.ANALYSIS_RESPONSE_SCHEMA)
-                logger.info(f"[OpenRouter] Response validation passed")
+                logger.info("[OpenRouter] Response validation passed")
             except ValidationError as e:
                 logger.error(f"[OpenRouter] Response validation failed: {e.message}")
-                logger.warning(f"[OpenRouter] Response structure invalid, returning empty components")
+                logger.warning("[OpenRouter] Response structure invalid, returning empty components")
                 return [], None
             
             # Extract sentence translation
@@ -540,10 +538,10 @@ Ensure the JSON is properly formatted and valid."""
                 raise ProcessingError(f"Invalid response format for verb '{verb}'")
             
             json_str = content[json_start:json_end]
-            logger.debug(f"[OpenRouter] Extracted conjugation JSON")
+            logger.debug("[OpenRouter] Extracted conjugation JSON")
             
             conjugation_data = json.loads(json_str)
-            logger.debug(f"[OpenRouter] Parsed conjugation data")
+            logger.debug("[OpenRouter] Parsed conjugation data")
             
             # Validate structure
             required_fields = ['infinitive', 'englishTranslation', 'verbType', 'tenses', 'examples']

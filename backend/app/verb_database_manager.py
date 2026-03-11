@@ -156,7 +156,6 @@ class VerbDatabaseManager:
             return {}
         
         try:
-            import sqlite3
             cursor = persistence.connection.cursor()
             
             cursor.execute("""
@@ -241,7 +240,6 @@ class VerbDatabaseManager:
             return {'note': 'Cleanup operations only available for SQLite database'}
         
         try:
-            import sqlite3
             cursor = persistence.connection.cursor()
             
             removed_count = 0
@@ -394,7 +392,6 @@ class VerbDatabaseManager:
                 return False
             
             # Delete from database
-            import sqlite3
             cursor = persistence.connection.cursor()
             cursor.execute("DELETE FROM verbs WHERE infinitive = ?", (infinitive,))
             persistence.connection.commit()

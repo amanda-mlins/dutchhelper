@@ -120,7 +120,7 @@ class CacheManager:
                     total_size += len(str(value).encode())
                 else:
                     total_size += len(str(value).encode())
-            except:
+            except Exception:
                 pass
         
         return {

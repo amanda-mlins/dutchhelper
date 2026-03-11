@@ -1,7 +1,6 @@
 """Text analysis service using OpenRouter LLM"""
 from app.schemas import TextAnalysisResponse, SentenceAnalysis
 from app.llm_service import OpenRouterService
-from typing import List
 
 class SentenceAnalyzerService:
     """Service for analyzing Dutch sentences using LLM"""

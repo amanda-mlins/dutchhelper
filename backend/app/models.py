@@ -1,9 +1,9 @@
 """Pydantic models for request/response validation"""
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Any
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import json
 
