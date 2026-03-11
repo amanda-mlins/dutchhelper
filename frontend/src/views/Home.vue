@@ -2,13 +2,15 @@
   <div id="app" class="container">
     <header class="header">
       <h1>🇳🇱 DutchHelper</h1>
-      <p>Learn Dutch with ease</p>
+      <p>Tools for leraning Dutch</p>
     </header>
 
     <main class="main">
       <section class="section">
         <h2>Welcome</h2>
-        <p>This is a learning platform to help you master the Dutch language through interactive tools.</p>
+        <p>This is a platform to help you master the Dutch language through interactive tools.</p>
+        <p>It doesn't replace a Dutch course, and it is powered by AI, so always verify the information and use it as a
+          supplement to your learning.</p>
       </section>
 
       <!-- Sign-in nudge for guests -->

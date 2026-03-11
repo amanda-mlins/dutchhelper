@@ -33,7 +33,7 @@
                 <p class="subtitle">How many words?</p>
                 <div class="word-count-options">
                     <button v-for="count in [5, 10, 20, 30, 50]" :key="count" class="option-button"
-                        @click="startGame(count)">
+                        :disabled="gamePhase === 'loading'" @click="startGame(count)">
                         {{ count }} Words
                     </button>
                 </div>
@@ -98,6 +98,17 @@
             </div>
 
             <!-- ══════════════════════════════════════════════
+                 LOADING PHASE
+            ══════════════════════════════════════════════ -->
+            <div v-else-if="gamePhase === 'loading'" class="game-saving">
+                <div class="saving-card">
+                    <div class="saving-spinner"></div>
+                    <p class="saving-title">Loading your game…</p>
+                    <p class="saving-sub">Picking the right words for you</p>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════════
                  PLAYING PHASE
             ══════════════════════════════════════════════ -->
             <div v-else-if="gamePhase === 'playing'" class="game-playing">
@@ -136,7 +147,7 @@
                     :class="{ correct: feedback.is_correct, wrong: !feedback.is_correct }">
                     <p class="feedback-text">{{ feedback.is_correct ? '✓ Correct!' : '✗ Wrong!' }}</p>
                     <p class="feedback-answer">Correct: <strong>{{ feedback.correct_article }} {{ currentWord.word
-                    }}</strong></p>
+                            }}</strong></p>
                 </div>
             </div>
 
@@ -261,6 +272,7 @@ async function loadStats() {
 }
 
 async function startGame(wordCount) {
+    gamePhase.value = 'loading'
     try {
         const payload = { count: wordCount, mode: auth.isAuthenticated ? gameMode.value : 'random' }
         const headers = {}
@@ -288,6 +300,7 @@ async function startGame(wordCount) {
         gamePhase.value = 'playing'
     } catch (e) {
         console.error(e)
+        gamePhase.value = 'setup'
         alert('Failed to start game. Please try again.')
     }
 }
