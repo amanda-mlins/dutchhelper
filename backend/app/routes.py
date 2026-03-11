@@ -1556,6 +1556,152 @@ def prep_verb_stats(
     return svc.get_stats()
 
 
+# ===========================================================================
+# Admin — Prep-verb pair cache  (/api/admin/prep-verb-pairs/*)
+# ===========================================================================
+
+class PrepVerbPairUpdate(BaseModel):
+    prep_sentence: Optional[str] = None
+    prep_english: Optional[str] = None
+    prep_explanation: Optional[str] = None
+    prep_distractors: Optional[List[str]] = None   # 3 strings
+    hard_sentence: Optional[str] = None
+    hard_english: Optional[str] = None
+    hard_correct_verb: Optional[str] = None
+    hard_explanation: Optional[str] = None
+    english_translation: Optional[str] = None
+
+
+@router.get("/admin/prep-verb-pairs")
+def admin_list_prep_verb_pairs(
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Return all cached prep-verb pairs with global aggregate stats (admin only)."""
+    import json as _json
+    from sqlalchemy import func
+
+    pairs = (
+        db.query(models.PrepVerbPair)
+        .order_by(models.PrepVerbPair.verb, models.PrepVerbPair.preposition)
+        .all()
+    )
+
+    unique_users = dict(
+        db.query(
+            models.PrepVerbStat.pair_id,
+            func.count(models.PrepVerbStat.user_id),
+        )
+        .group_by(models.PrepVerbStat.pair_id)
+        .all()
+    )
+
+    result = []
+    for p in pairs:
+        error_rate = (
+            round((1 - p.times_correct / p.times_seen) * 100)
+            if p.times_seen else None
+        )
+        result.append({
+            "id": p.id,
+            "verb": p.verb,
+            "preposition": p.preposition,
+            "english_translation": p.english_translation,
+            "reflexive": p.reflexive,
+            # prep mode
+            "prep_sentence": p.prep_sentence,
+            "prep_english": p.prep_english,
+            "prep_explanation": p.prep_explanation,
+            "prep_distractors": _json.loads(p.prep_distractors) if p.prep_distractors else [],
+            # hard mode
+            "hard_sentence": p.hard_sentence,
+            "hard_english": p.hard_english,
+            "hard_correct_verb": p.hard_correct_verb,
+            "hard_explanation": p.hard_explanation,
+            # stats
+            "times_seen": p.times_seen,
+            "times_correct": p.times_correct,
+            "error_rate": error_rate,
+            "unique_users": unique_users.get(p.id, 0),
+            "created_at": p.created_at.isoformat(),
+        })
+    return result
+
+
+@router.patch("/admin/prep-verb-pairs/{pair_id}")
+def admin_update_prep_verb_pair(
+    pair_id: int,
+    body: PrepVerbPairUpdate,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Edit a cached prep-verb pair's sentences (admin only)."""
+    import json as _json
+
+    p = db.get(models.PrepVerbPair, pair_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Pair not found")
+
+    if body.english_translation is not None:
+        p.english_translation = body.english_translation
+    if body.prep_sentence is not None:
+        if body.prep_sentence and "___" not in body.prep_sentence:
+            raise HTTPException(status_code=400, detail="prep_sentence must contain ___")
+        p.prep_sentence = body.prep_sentence
+    if body.prep_english is not None:
+        p.prep_english = body.prep_english
+    if body.prep_explanation is not None:
+        p.prep_explanation = body.prep_explanation
+    if body.prep_distractors is not None:
+        if len(body.prep_distractors) != 3:
+            raise HTTPException(status_code=400, detail="prep_distractors must be exactly 3 strings")
+        p.prep_distractors = _json.dumps(body.prep_distractors)
+    if body.hard_sentence is not None:
+        p.hard_sentence = body.hard_sentence
+    if body.hard_english is not None:
+        p.hard_english = body.hard_english
+    if body.hard_correct_verb is not None:
+        p.hard_correct_verb = body.hard_correct_verb
+    if body.hard_explanation is not None:
+        p.hard_explanation = body.hard_explanation
+
+    db.commit()
+    db.refresh(p)
+    import json as _json2
+    return {
+        "id": p.id,
+        "verb": p.verb,
+        "preposition": p.preposition,
+        "english_translation": p.english_translation,
+        "reflexive": p.reflexive,
+        "prep_sentence": p.prep_sentence,
+        "prep_english": p.prep_english,
+        "prep_explanation": p.prep_explanation,
+        "prep_distractors": _json2.loads(p.prep_distractors) if p.prep_distractors else [],
+        "hard_sentence": p.hard_sentence,
+        "hard_english": p.hard_english,
+        "hard_correct_verb": p.hard_correct_verb,
+        "hard_explanation": p.hard_explanation,
+        "times_seen": p.times_seen,
+        "times_correct": p.times_correct,
+        "created_at": p.created_at.isoformat(),
+    }
+
+
+@router.delete("/admin/prep-verb-pairs/{pair_id}", status_code=204)
+def admin_delete_prep_verb_pair(
+    pair_id: int,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_admin_user),
+):
+    """Delete a cached prep-verb pair and all associated data (admin only)."""
+    p = db.get(models.PrepVerbPair, pair_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Pair not found")
+    db.delete(p)
+    db.commit()
+
+
 @router.get("/prep-verb-game/pairs")
 def prep_verb_pairs(db: Session = Depends(get_db)):
     """Return all DB-persisted pairs (which have LLM-generated sentences) plus

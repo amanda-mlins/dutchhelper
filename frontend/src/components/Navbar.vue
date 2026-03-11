@@ -67,6 +67,9 @@
                             <router-link to="/admin/conjunction-sentences" class="admin-menu-item" @click="closeAll">
                                 🔗 Conjunction Sentences
                             </router-link>
+                            <router-link to="/admin/prep-verb-pairs" class="admin-menu-item" @click="closeAll">
+                                🔧 Prep-Verb Pairs
+                            </router-link>
                         </div>
                     </div>
                 </div>
