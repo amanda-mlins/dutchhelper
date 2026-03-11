@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — runs on every push and pull-request (all branches)
+#
+# Jobs
+#   backend  – install deps → ruff lint → pytest
+#   frontend – npm ci → vite build
+#
+# Both jobs must pass before a PR can be merged (enforce via branch protection).
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  # ── Backend ────────────────────────────────────────────────────────────────
+  backend:
+    name: Backend — lint & test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      # Provide dummy secrets so the app can be imported without crashing
+      SECRET_KEY: ci-secret-key-not-real
+      DATABASE_URL: sqlite:///./test.db
+      OPENROUTER_API_KEY: ci-dummy
+      ENVIRONMENT: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install ruff (linter)
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check app/
+
+      - name: Run pytest
+        run: pytest tests/ -v --tb=short
+        # Skip tests that require a live LLM or real DB by default.
+        # Mark those tests with @pytest.mark.integration and run manually.
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend — build check
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 3

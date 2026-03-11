@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Deploy — Backend → Railway
+#
+# Triggered on push to main AFTER CI passes.
+#
+# Required GitHub secrets:
+#   RAILWAY_TOKEN   – your Railway API token
+#                     Generate at: https://railway.com/account/tokens
+#
+# Optional (set in Railway project env instead, but can override here):
+#   No app secrets are injected here; manage them in the Railway dashboard.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Deploy Backend → Railway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only run when backend code or deployment config changes
+      - "backend/**"
+      - "railway.json"
+      - "nixpacks.toml"
+      - ".github/workflows/deploy-backend.yml"
+
+  # Allow manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+
+# Prevent two backend deploys from running simultaneously
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  # ── Gate: CI must have passed first ───────────────────────────────────────
+  ci-gate:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CI status
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "Backend — lint & test"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
+  # ── Deploy ─────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: ci-gate
+    environment:
+      name: production-backend
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        id: deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up --service backend --detach
+          echo "url=$(railway status --json | jq -r '.deploymentUrl // empty')" >> "$GITHUB_OUTPUT"
+
+      - name: Health check
+        run: |
+          echo "Waiting 30 s for Railway to finish starting…"
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.RAILWAY_BACKEND_URL }}/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed — HTTP $STATUS"
+            exit 1
+          fi
+          echo "Health check passed (HTTP $STATUS)"
