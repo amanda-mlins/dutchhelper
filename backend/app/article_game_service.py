@@ -219,37 +219,63 @@ class ArticleGameService:
         return _strip_article(selected[:count])
 
     def _get_mistake_words(self) -> List[Dict]:
-        """Return words the user has gotten wrong, weighted by error rate."""
+        """Return words the user has gotten wrong, weighted by error rate.
+
+        Single JOIN query — avoids N+1 round-trips to article_words.
+        """
         rows = (
-            self.db.query(models.ArticleWordMistake)
+            self.db.query(models.ArticleWord, models.ArticleWordMistake.times_wrong)
+            .join(
+                models.ArticleWordMistake,
+                models.ArticleWord.word == models.ArticleWordMistake.word,
+            )
             .filter(
                 models.ArticleWordMistake.user_id == self.user_id,
                 models.ArticleWordMistake.times_wrong > 0,
+                models.ArticleWord.is_active == True,  # noqa: E712
             )
             .order_by(models.ArticleWordMistake.times_wrong.desc())
             .limit(50)
             .all()
         )
-        result = []
-        for row in rows:
-            info = _get_db_word_info(row.word, self.db)
-            if info:
-                result.append(info)
-        return result
+        return [
+            {
+                "word": r.ArticleWord.word,
+                "article": r.ArticleWord.article,
+                "translation": r.ArticleWord.translation,
+                "difficulty": r.ArticleWord.difficulty,
+                "category": r.ArticleWord.category,
+            }
+            for r in rows
+        ]
 
     def _get_wordbank_words(self) -> List[Dict]:
-        """Return user's word-bank entries that appear in the article word list."""
-        user_words = (
-            self.db.query(models.UserWord)
-            .filter(models.UserWord.user_id == self.user_id)
+        """Return user's word-bank entries that appear in the article word list.
+
+        Single JOIN query — avoids N+1 round-trips to article_words.
+        """
+        rows = (
+            self.db.query(models.ArticleWord)
+            .join(
+                models.UserWord,
+                models.ArticleWord.word == models.UserWord.word,
+            )
+            .filter(
+                models.UserWord.user_id == self.user_id,
+                models.ArticleWord.is_active == True,  # noqa: E712
+            )
             .all()
         )
-        result = []
-        for uw in user_words:
-            info = _get_db_word_info(uw.word, self.db)
-            if info:
-                result.append(info)
-        return result
+        return [
+            {
+                "word": r.word,
+                "article": r.article,
+                "translation": r.translation,
+                "difficulty": r.difficulty,
+                "category": r.category,
+            }
+            for r in rows
+        ]
 
     @staticmethod
     def _pick(pool: List[Dict], n: int) -> List[Dict]:
