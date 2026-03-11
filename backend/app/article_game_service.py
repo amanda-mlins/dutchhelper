@@ -53,11 +53,35 @@ def _get_db_word_info(word: str, db: Session) -> Optional[Dict[str, Any]]:
     }
 
 
-def _random_words_from_db(db: Session, count: int) -> List[Dict[str, Any]]:
-    """Return a random sample of active words from the DB."""
-    all_words = _get_active_words_from_db(db)
-    count = min(count, len(all_words))
-    return random.sample(all_words, count) if count > 0 else []
+def _random_words_from_db(
+    db: Session,
+    count: int,
+    exclude_words: Optional[set] = None,
+) -> List[Dict[str, Any]]:
+    """Return a random sample of active words from the DB.
+
+    Uses ORDER BY RANDOM() LIMIT n so the database does the sampling —
+    no need to pull the full table into Python memory.
+    ``exclude_words`` (a set of word strings) are filtered out in SQL via
+    NOT IN, so we never fetch rows we're about to discard.
+    """
+    if count <= 0:
+        return []
+    from sqlalchemy import func
+    q = db.query(models.ArticleWord).filter_by(is_active=True)
+    if exclude_words:
+        q = q.filter(models.ArticleWord.word.notin_(exclude_words))
+    rows = q.order_by(func.random()).limit(count).all()
+    return [
+        {
+            "word": r.word,
+            "article": r.article,
+            "translation": r.translation,
+            "difficulty": r.difficulty,
+            "category": r.category,
+        }
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +179,13 @@ class ArticleGameService:
           "wordbank"  — 70% word-bank nouns + 30% random
           "random"    — fully random from DB word list
         """
-        all_db_words = _get_active_words_from_db(self.db)
-        pool_size = len(all_db_words) or len(DUTCH_ARTICLE_WORDS)
+        from sqlalchemy import func
+        total_active = (
+            self.db.query(func.count(models.ArticleWord.id))
+            .filter_by(is_active=True)
+            .scalar() or 0
+        )
+        pool_size = total_active or len(DUTCH_ARTICLE_WORDS)
         count = max(5, min(count, pool_size))
 
         if mode == "random":
@@ -179,12 +208,13 @@ class ArticleGameService:
                 [w for w in wordbank_words if w["word"] not in {x["word"] for x in selected}], n_wb
             )
 
-        # Fill remainder from DB word list, no duplicates
-        selected_words = {w["word"] for w in selected}
+        # Fill remainder from DB — pass already-selected words so the DB
+        # filters them out with NOT IN rather than fetching the full table.
         n_random = count - len(selected)
-        pool = [w for w in all_db_words if w["word"] not in selected_words]
-        random.shuffle(pool)
-        selected += pool[:n_random]
+        if n_random > 0:
+            selected_words = {w["word"] for w in selected}
+            selected += _random_words_from_db(self.db, n_random, exclude_words=selected_words)
+
         random.shuffle(selected)
         return _strip_article(selected[:count])
 
