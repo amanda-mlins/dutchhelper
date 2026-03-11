@@ -245,7 +245,7 @@ async def generate_question(
     # ── 3. LLM fallback ───────────────────────────────────────────────────
     # Choose a pair from the built-in list that exists in DB but lacks sentences,
     # or create a new DB row for a freshly chosen pair.
-    verb, preposition, english, reflexive = _pick_random_pair(verb_filter)
+    verb, preposition, english, reflexive, sentence = _pick_random_pair(verb_filter)
 
     # Find or create the DB row for this pair
     pair = db.query(models.PrepVerbPair).filter(
