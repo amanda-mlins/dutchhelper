@@ -26,11 +26,14 @@ jobs:
         working-directory: backend
 
     env:
-      # Provide dummy secrets so the app can be imported without crashing
-      SECRET_KEY: ci-secret-key-not-real
+      # Provide dummy secrets so the app can be imported without crashing.
+      # Values must pass the validators in app/config.py:
+      #   JWT_SECRET_KEY  — must be ≥32 chars and not contain "CHANGE_ME"
+      #   OPENROUTER_API_KEY — must be ≥10 chars
       DATABASE_URL: sqlite:///./test.db
-      OPENROUTER_API_KEY: ci-dummy
       ENVIRONMENT: test
+      JWT_SECRET_KEY: ci-test-secret-key-not-real-do-not-use-in-prod-00000
+      OPENROUTER_API_KEY: ci-dummy-key-not-real
 
     steps:
       - name: Checkout
