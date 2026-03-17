@@ -107,9 +107,9 @@
         </div>
 
         <!-- ── Toolbar ──────────────────────────────────────────────── -->
-        <div v-if="words.length" class="toolbar">
+        <div class="toolbar" :class="{ 'toolbar--empty': !words.length }">
             <!-- Select-mode controls -->
-            <button v-if="!selectMode" @click="enterSelectMode" class="btn-select-mode">
+            <button v-if="!selectMode" @click="enterSelectMode" class="btn-select-mode" :disabled="!words.length">
                 ☑️ Select words
             </button>
             <template v-else>
@@ -148,12 +148,38 @@
             <!-- Spacer -->
             <span class="toolbar-spacer"></span>
 
+            <!-- Search -->
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input v-model="searchQuery" class="search-input" type="search" placeholder="Search words…" />
+                <button v-if="searchQuery" @click="searchQuery = ''" class="search-clear"
+                    title="Clear search">✕</button>
+            </div>
+
+            <!-- Type filter -->
+            <select v-model="typeFilter" class="type-select" title="Filter by word type">
+                <option value="">All types</option>
+                <option v-for="t in wordTypes" :key="t" :value="t">{{ t }}</option>
+            </select>
+
             <!-- Category filter -->
             <div v-if="categories.length" class="category-filter">
                 <select v-model="categoryFilter" class="category-select">
                     <option value="">All categories</option>
                     <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
                 </select>
+            </div>
+
+            <!-- Sort controls -->
+            <div class="sort-wrap">
+                <button @click="toggleSort('alpha')" :class="['sort-btn', { active: sortKey === 'alpha' }]"
+                    title="Sort alphabetically">
+                    🔤 <span v-if="sortKey === 'alpha'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+                </button>
+                <button @click="toggleSort('date')" :class="['sort-btn', { active: sortKey === 'date' }]"
+                    title="Sort by date added">
+                    📅 <span v-if="sortKey === 'date'">{{ sortDir === 'desc' ? '↓' : '↑' }}</span>
+                </button>
             </div>
 
             <!-- View-mode toggle -->
@@ -163,6 +189,23 @@
                 <button @click="viewMode = 'list'" :class="['view-btn', { active: viewMode === 'list' }]"
                     title="List view">☰</button>
             </div>
+        </div>
+
+        <!-- Active filters summary -->
+        <div v-if="searchQuery || typeFilter || categoryFilter" class="filter-summary">
+            <span class="filter-summary-count">{{ filteredWords.length }} result{{ filteredWords.length !== 1 ? 's' : ''
+            }}</span>
+            <span v-if="searchQuery" class="filter-chip">
+                🔍 "{{ searchQuery }}" <button @click="searchQuery = ''">✕</button>
+            </span>
+            <span v-if="typeFilter" class="filter-chip">
+                📝 {{ typeFilter }} <button @click="typeFilter = ''">✕</button>
+            </span>
+            <span v-if="categoryFilter" class="filter-chip">
+                🏷️ {{ categoryFilter }} <button @click="categoryFilter = ''">✕</button>
+            </span>
+            <button class="filter-clear-all" @click="searchQuery = ''; typeFilter = ''; categoryFilter = ''">Clear
+                all</button>
         </div>
 
         <!-- ── Loading / error ──────────────────────────────────────────── -->
@@ -299,6 +342,12 @@ export default {
             editingCategoryValue: '',
             bulkCategoryValue: '',
             isBulkCategoring: false,
+
+            // Search, sort, type filter
+            searchQuery: '',
+            typeFilter: '',
+            sortKey: 'date',    // 'alpha' | 'date'
+            sortDir: 'desc',    // 'asc'  | 'desc'
         };
     },
     computed: {
@@ -315,8 +364,45 @@ export default {
             return this.bulkTotal ? Math.round((this.bulkDone / this.bulkTotal) * 100) : 0;
         },
         filteredWords() {
-            if (!this.categoryFilter) return this.words;
-            return this.words.filter(w => w.category === this.categoryFilter);
+            const q = this.searchQuery.trim().toLowerCase();
+            let list = this.words;
+
+            // 1. Search by word or English translation
+            if (q) {
+                list = list.filter(w => {
+                    const inWord = w.word?.toLowerCase().includes(q);
+                    const inTranslation = w.details?.translation_en?.toLowerCase().includes(q);
+                    return inWord || inTranslation;
+                });
+            }
+
+            // 2. Type filter
+            if (this.typeFilter) {
+                list = list.filter(w => w.word_type === this.typeFilter);
+            }
+
+            // 3. Category filter
+            if (this.categoryFilter) {
+                list = list.filter(w => w.category === this.categoryFilter);
+            }
+
+            // 4. Sort
+            list = [...list].sort((a, b) => {
+                let cmp = 0;
+                if (this.sortKey === 'alpha') {
+                    cmp = a.word.localeCompare(b.word, 'nl', { sensitivity: 'base' });
+                } else {
+                    // date: sort by created_at
+                    cmp = new Date(a.created_at) - new Date(b.created_at);
+                }
+                return this.sortDir === 'asc' ? cmp : -cmp;
+            });
+
+            return list;
+        },
+        wordTypes() {
+            const types = [...new Set(this.words.map(w => w.word_type).filter(Boolean))];
+            return types.sort();
         },
     },
     methods: {
@@ -467,6 +553,17 @@ export default {
                 console.error(err);
             } finally {
                 this.isDeletingSelected = false;
+            }
+        },
+
+        // ── Sort ────────────────────────────────────────────────────────
+        toggleSort(key) {
+            if (this.sortKey === key) {
+                this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortKey = key;
+                // default directions: newest first for date, A→Z for alpha
+                this.sortDir = key === 'date' ? 'desc' : 'asc';
             }
         },
 
@@ -1044,6 +1141,172 @@ export default {
 
 .toolbar-spacer {
     flex: 1;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────── */
+.search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 9px;
+    font-size: 13px;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.search-input {
+    padding: 7px 28px 7px 30px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    width: 180px;
+    background: #fff;
+    color: #374151;
+    transition: border-color 0.15s, width 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+    width: 220px;
+}
+
+/* hide browser's native clear button so we use our own */
+.search-input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.search-clear {
+    position: absolute;
+    right: 7px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: #9ca3af;
+    padding: 0;
+    line-height: 1;
+}
+
+.search-clear:hover {
+    color: #374151;
+}
+
+/* ── Type filter ─────────────────────────────────────────────────────────── */
+.type-select {
+    padding: 7px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+    text-transform: capitalize;
+}
+
+/* ── Sort buttons ────────────────────────────────────────────────────────── */
+.sort-wrap {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.sort-btn {
+    background: #f3f4f6;
+    border: none;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #374151;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
+}
+
+.sort-btn:first-child {
+    border-right: 1px solid #d1d5db;
+}
+
+.sort-btn:hover {
+    background: #e5e7eb;
+}
+
+.sort-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+/* ── Active filter summary bar ───────────────────────────────────────────── */
+.filter-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    background: #f0f4ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    font-size: 0.875rem;
+}
+
+.filter-summary-count {
+    font-weight: 700;
+    color: #374151;
+    margin-right: 4px;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e0e7ff;
+    color: #3730a3;
+    border-radius: 999px;
+    padding: 3px 10px 3px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.filter-chip button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    color: #6366f1;
+    padding: 0;
+    line-height: 1;
+}
+
+.filter-chip button:hover {
+    color: #4338ca;
+}
+
+.filter-clear-all {
+    margin-left: auto;
+    background: none;
+    border: 1px solid #818cf8;
+    color: #6366f1;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.filter-clear-all:hover {
+    background: #e0e7ff;
+}
+
+.toolbar--empty .btn-select-mode {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 /* ── View toggle ────────────────────────────────────────────────────────── */
