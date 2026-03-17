@@ -1726,3 +1726,88 @@ def prep_verb_pairs(db: Session = Depends(get_db)):
             })
     return result
 
+
+# ============================================================================
+# Admin — User Management
+# ============================================================================
+
+class UserAdminPatch(BaseModel):
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+    is_verified: Optional[bool] = None
+
+
+def _user_to_dict(u: models.User, reveal_email: bool = False) -> dict:
+    """Serialise a User row. Email is masked unless reveal_email is True."""
+    email_display: str
+    if reveal_email:
+        email_display = u.email
+    else:
+        # Show only first char + domain: a***@example.com
+        parts = u.email.split("@", 1)
+        email_display = parts[0][0] + "***@" + parts[1] if len(parts) == 2 else "***"
+
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email_masked": email_display,
+        "auth_method": "google" if u.google_id and not u.hashed_password else
+                       ("google+password" if u.google_id and u.hashed_password else "password"),
+        "is_active": u.is_active,
+        "is_admin": u.is_admin,
+        "is_verified": u.is_verified,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "word_count": len(u.words),
+    }
+
+
+@router.get("/admin/users")
+def admin_list_users(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_admin_user),
+    reveal: bool = False,        # ?reveal=true to unmask emails
+):
+    """Return all registered users. Email masked by default (pass ?reveal=true to show)."""
+    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+    return [_user_to_dict(u, reveal_email=reveal) for u in users]
+
+
+@router.patch("/admin/users/{user_id}")
+def admin_patch_user(
+    user_id: int,
+    body: UserAdminPatch,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_admin_user),
+):
+    """Toggle is_active, is_admin, or is_verified for a user."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Prevent an admin from revoking their own admin flag
+    if user.id == admin.id and body.is_admin is False:
+        raise HTTPException(status_code=400, detail="You cannot remove your own admin flag")
+    if body.is_active is not None:
+        user.is_active = body.is_active
+    if body.is_admin is not None:
+        user.is_admin = body.is_admin
+    if body.is_verified is not None:
+        user.is_verified = body.is_verified
+    db.commit()
+    db.refresh(user)
+    return _user_to_dict(user)
+
+
+@router.delete("/admin/users/{user_id}", status_code=204)
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_admin_user),
+):
+    """Permanently delete a user account and all their data."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account from here")
+    db.delete(user)
+    db.commit()

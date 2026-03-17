@@ -70,6 +70,9 @@
                             <router-link to="/admin/prep-verb-pairs" class="admin-menu-item" @click="closeAll">
                                 🔧 Prep-Verb Pairs
                             </router-link>
+                            <router-link to="/admin/users" class="admin-menu-item" @click="closeAll">
+                                👥 Users
+                            </router-link>
                         </div>
                     </div>
                 </div>
