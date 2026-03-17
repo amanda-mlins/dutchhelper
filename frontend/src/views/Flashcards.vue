@@ -174,7 +174,7 @@
 
             <!-- Card -->
             <div class="card-scene" @click="flip">
-                <div class="card-inner" :class="{ flipped: isFlipped }">
+                <div class="card-inner" :key="currentIndex" :class="{ flipped: isFlipped }">
                     <!-- Front -->
                     <div class="card-face card-front">
                         <span class="card-side-label">{{ prepFrontLabel }}</span>
@@ -187,7 +187,7 @@
                         <template v-else-if="currentCard._mode === 'nl-en'">
                             <p class="card-word prep-front-verb">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                currentCard.verb }}
+                                    currentCard.verb }}
                                 <span class="prep-front-prep">{{ currentCard.preposition }}</span>
                             </p>
                         </template>
@@ -200,7 +200,7 @@
                         <template v-else-if="currentCard._mode === 'verb-prep'">
                             <p class="card-word prep-front-verb">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                currentCard.verb }}
+                                    currentCard.verb }}
                             </p>
                             <span class="card-type-badge en-nl-badge">{{ currentCard.english_translation }}</span>
                             <span class="card-mode-hint">Which preposition?</span>
@@ -234,7 +234,7 @@
                         <template v-else-if="currentCard._mode === 'en-nl'">
                             <p class="card-translation prep-reveal-pair">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                currentCard.verb }}
+                                    currentCard.verb }}
                                 <span class="prep-reveal-prep">{{ currentCard.preposition }}</span>
                             </p>
                             <p v-if="currentCard.prepExample" class="card-example">
@@ -245,7 +245,7 @@
                         <template v-else-if="currentCard._mode === 'verb-prep'">
                             <p class="card-translation prep-reveal-pair">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                currentCard.verb }}
+                                    currentCard.verb }}
                                 <span class="prep-reveal-prep">{{ currentCard.preposition }}</span>
                             </p>
                             <p v-if="currentCard.prepExample" class="card-example">
