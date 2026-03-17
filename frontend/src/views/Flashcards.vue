@@ -101,6 +101,20 @@
                     </template>
                 </div>
 
+                <!-- Exercise type picker (shown for both prep modes) -->
+                <div v-if="setupMode === 'prep-verbs' || setupMode === 'discover'" class="exercise-type-section">
+                    <span class="exercise-type-label">Exercise direction</span>
+                    <div class="exercise-type-options">
+                        <button v-for="opt in exerciseTypeOptions" :key="opt.value"
+                            :class="['exercise-type-btn', { active: prepExerciseType === opt.value }]"
+                            @click="prepExerciseType = opt.value" :title="opt.description">
+                            <span class="exercise-type-icon">{{ opt.icon }}</span>
+                            <span class="exercise-type-name">{{ opt.label }}</span>
+                            <span class="exercise-type-desc">{{ opt.description }}</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Discover panel -->
                 <div v-if="setupMode === 'discover'" class="discover-panel">
                     <div v-if="isPrepLoading" class="pick-toolbar">Loading pairs…</div>
@@ -163,25 +177,39 @@
                 <div class="card-inner" :class="{ flipped: isFlipped }">
                     <!-- Front -->
                     <div class="card-face card-front">
-                        <span class="card-side-label">{{ isPrepMode ? 'Verb + Preposition' : 'Dutch' }}</span>
+                        <span class="card-side-label">{{ prepFrontLabel }}</span>
                         <!-- Word-bank card front -->
                         <template v-if="!isPrepMode">
                             <p class="card-word">{{ currentCard.word }}</p>
                             <span class="card-type-badge">{{ currentCard.word_type }}</span>
                         </template>
-                        <!-- Prep-verb card front -->
-                        <template v-else>
+                        <!-- Prep: NL → EN  (show Dutch pair) -->
+                        <template v-else-if="currentCard._mode === 'nl-en'">
                             <p class="card-word prep-front-verb">
                                 {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
-                                    currentCard.verb }}
+                                currentCard.verb }}
                                 <span class="prep-front-prep">{{ currentCard.preposition }}</span>
                             </p>
+                        </template>
+                        <!-- Prep: EN → NL  (show English translation) -->
+                        <template v-else-if="currentCard._mode === 'en-nl'">
+                            <p class="card-word">{{ currentCard.english_translation }}</p>
+                            <span class="card-type-badge en-nl-badge">verb + preposition</span>
+                        </template>
+                        <!-- Prep: verb → prep  (show verb + English, hide preposition) -->
+                        <template v-else-if="currentCard._mode === 'verb-prep'">
+                            <p class="card-word prep-front-verb">
+                                {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
+                                currentCard.verb }}
+                            </p>
+                            <span class="card-type-badge en-nl-badge">{{ currentCard.english_translation }}</span>
+                            <span class="card-mode-hint">Which preposition?</span>
                         </template>
                         <p class="card-hint">Click to reveal →</p>
                     </div>
                     <!-- Back -->
                     <div class="card-face card-back">
-                        <span class="card-side-label">Translation &amp; Example</span>
+                        <span class="card-side-label">{{ prepBackLabel }}</span>
                         <!-- Word-bank card back -->
                         <template v-if="!isPrepMode">
                             <p class="card-translation">{{ currentCard.details?.translation_en || '—' }}</p>
@@ -192,9 +220,34 @@
                                 "{{ currentCard.details.example }}"
                             </p>
                         </template>
-                        <!-- Prep-verb card back -->
-                        <template v-else>
+                        <!-- Prep: NL → EN  (reveal English + example) -->
+                        <template v-else-if="currentCard._mode === 'nl-en'">
                             <p class="card-translation">{{ currentCard.english_translation }}</p>
+                            <p v-if="currentCard.prepExample" class="card-example">
+                                "{{ currentCard.prepExample }}"
+                            </p>
+                            <p v-if="currentCard.prepExampleEn" class="card-example card-example-en">
+                                {{ currentCard.prepExampleEn }}
+                            </p>
+                        </template>
+                        <!-- Prep: EN → NL  (reveal Dutch pair + example) -->
+                        <template v-else-if="currentCard._mode === 'en-nl'">
+                            <p class="card-translation prep-reveal-pair">
+                                {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
+                                currentCard.verb }}
+                                <span class="prep-reveal-prep">{{ currentCard.preposition }}</span>
+                            </p>
+                            <p v-if="currentCard.prepExample" class="card-example">
+                                "{{ currentCard.prepExample }}"
+                            </p>
+                        </template>
+                        <!-- Prep: verb → prep  (reveal preposition, highlighted) -->
+                        <template v-else-if="currentCard._mode === 'verb-prep'">
+                            <p class="card-translation prep-reveal-pair">
+                                {{ currentCard.reflexive ? (currentCard.verb.includes('zich ') ? '' : 'zich ') : '' }}{{
+                                currentCard.verb }}
+                                <span class="prep-reveal-prep">{{ currentCard.preposition }}</span>
+                            </p>
                             <p v-if="currentCard.prepExample" class="card-example">
                                 "{{ currentCard.prepExample }}"
                             </p>
@@ -334,6 +387,7 @@ export default {
             isPrepLoading: false,
             prepLoadError: null,
             discoverCount: 20,
+            prepExerciseType: 'mixed',  // 'mixed' | 'nl-en' | 'en-nl' | 'verb-prep'
 
             // ----- study -----
             deck: [],
@@ -360,8 +414,53 @@ export default {
             return map;
         },
 
+        exerciseTypeOptions() {
+            return [
+                {
+                    value: 'mixed',
+                    icon: '🔀',
+                    label: 'Mixed',
+                    description: 'Random direction each card',
+                },
+                {
+                    value: 'nl-en',
+                    icon: '🇳🇱→🇬🇧',
+                    label: 'NL → EN',
+                    description: 'See Dutch pair, recall English',
+                },
+                {
+                    value: 'en-nl',
+                    icon: '🇬🇧→🇳🇱',
+                    label: 'EN → NL',
+                    description: 'See English, recall Dutch pair',
+                },
+                {
+                    value: 'verb-prep',
+                    icon: '🎯',
+                    label: 'Guess the preposition',
+                    description: 'See verb + English, guess the preposition',
+                },
+            ];
+        },
+
         isPrepMode() {
             return this.setupMode === 'prep-verbs' || this.setupMode === 'discover';
+        },
+
+        prepFrontLabel() {
+            if (!this.isPrepMode) return 'Dutch';
+            const mode = this.currentCard?._mode;
+            if (mode === 'en-nl') return 'English — recall Dutch';
+            if (mode === 'verb-prep') return 'Guess the preposition';
+            return 'Verb + Preposition';
+        },
+
+        prepBackLabel() {
+            if (!this.isPrepMode) return 'Translation & Example';
+            const mode = this.currentCard?._mode;
+            if (mode === 'en-nl') return 'Dutch pair';
+            if (mode === 'verb-prep') return 'Answer';
+            return 'Translation & Example';
         },
 
         discoverCountOptions() {
@@ -461,6 +560,16 @@ export default {
         },
 
         buildDeck() {
+            const PREP_MODES = ['nl-en', 'en-nl', 'verb-prep'];
+
+            /** Assign _mode to a prep card based on the exercise type setting */
+            const assignMode = (card) => {
+                const mode = this.prepExerciseType === 'mixed'
+                    ? PREP_MODES[Math.floor(Math.random() * PREP_MODES.length)]
+                    : this.prepExerciseType;
+                return { ...card, _mode: mode };
+            };
+
             let source;
             if (this.setupMode === 'all') {
                 source = [...this.allWords];
@@ -468,7 +577,7 @@ export default {
                 source = this.selectedCategory ? [...(this.wordsByCategory[this.selectedCategory] || [])] : [];
             } else if (this.setupMode === 'prep-verbs') {
                 // Map each pair to a flashcard-shaped object
-                source = this.prepPairs.map(p => ({
+                source = this.prepPairs.map(p => assignMode({
                     ...p,
                     _prepCard: true,
                     // Example sentence: prefer prep_sentence (has ___ blank), show filled-in version
@@ -485,7 +594,7 @@ export default {
                     const j = Math.floor(Math.random() * (i + 1));
                     [pool[i], pool[j]] = [pool[j], pool[i]];
                 }
-                source = pool.slice(0, this.discoverCount).map(p => ({
+                source = pool.slice(0, this.discoverCount).map(p => assignMode({
                     ...p,
                     _prepCard: true,
                     prepExample: p.prep_sentence ? p.prep_sentence.replace('___', p.preposition) : null,
@@ -1366,6 +1475,109 @@ kbd {
 .prep-highlight {
     color: #667eea;
     font-weight: 700;
+}
+
+/* ── Exercise type picker ───────────────────────────────────────────────── */
+.exercise-type-section {
+    margin: 0 0 20px;
+    text-align: center;
+}
+
+.exercise-type-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+}
+
+.exercise-type-options {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.exercise-type-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.18s;
+    min-width: 110px;
+}
+
+.exercise-type-btn:hover {
+    border-color: #a5b4fc;
+    background: #f5f3ff;
+}
+
+.exercise-type-btn.active {
+    border-color: #667eea;
+    background: #eef2ff;
+}
+
+.exercise-type-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.exercise-type-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #374151;
+}
+
+.exercise-type-btn.active .exercise-type-name {
+    color: #4338ca;
+}
+
+.exercise-type-desc {
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+    line-height: 1.3;
+}
+
+/* ── Card extras for new modes ──────────────────────────────────────────── */
+.en-nl-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.card-mode-hint {
+    font-size: 15px;
+    font-weight: 600;
+    opacity: 0.85;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 4px 14px;
+}
+
+/* Back: revealed Dutch pair (EN→NL / verb-prep modes) */
+.prep-reveal-pair {
+    font-size: clamp(22px, 5vw, 36px);
+    font-weight: 700;
+    color: #374151;
+    line-height: 1.2;
+}
+
+.prep-reveal-prep {
+    display: inline-block;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 8px;
+    padding: 0 10px;
+    margin-left: 6px;
+    font-weight: 800;
+    font-size: 1.1em;
 }
 
 /* Prep-verb card front */
