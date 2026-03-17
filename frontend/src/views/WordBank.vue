@@ -38,6 +38,16 @@
                     placeholder="appel, boom, auto, huis, fiets&#10;(one word per line or comma-separated)" rows="4"
                     :disabled="bulkStep === 'progress'" />
 
+                <div class="bulk-category-row">
+                    <label class="bulk-category-label" for="bulkCategoryField">🏷️ Tag all with category</label>
+                    <input id="bulkCategoryField" v-model="bulkImportCategory" class="bulk-category-field"
+                        placeholder="e.g. Travel, Verbs… (optional)" list="bulk-category-suggestions"
+                        :disabled="bulkStep === 'progress'" />
+                    <datalist id="bulk-category-suggestions">
+                        <option v-for="c in categories" :key="c" :value="c" />
+                    </datalist>
+                </div>
+
                 <div v-if="parsedWords.length" class="parsed-preview">
                     <span class="parsed-count">{{ parsedWords.length }} word{{ parsedWords.length !== 1 ? 's' : '' }}
                         detected:</span>
@@ -272,6 +282,7 @@ export default {
             bulkSummary: { added: 0, errors: 0 },
             bulkTotal: 0,
             bulkDone: 0,
+            bulkImportCategory: '',
 
             // Multi-select delete
             selectMode: false,
@@ -366,6 +377,7 @@ export default {
             this.bulkSummary = { added: 0, errors: 0 };
             this.bulkTotal = 0;
             this.bulkDone = 0;
+            this.bulkImportCategory = '';
         },
         async startBulkImport() {
             const wordList = this.parsedWords;
@@ -381,7 +393,10 @@ export default {
             this.bulkStep = 'progress';
 
             try {
-                const { data } = await authAxios.post('/api/word-bank/words/bulk', { words: wordList });
+                const { data } = await authAxios.post('/api/word-bank/words/bulk', {
+                    words: wordList,
+                    category: this.bulkImportCategory.trim() || null,
+                });
                 const resultMap = Object.fromEntries(data.results.map(r => [r.word, r]));
                 this.bulkResults = this.bulkResults.map(r => resultMap[r.word] ?? r);
                 this.bulkDone = this.bulkTotal;
@@ -649,6 +664,43 @@ export default {
     color: #6b7280;
     font-size: 0.9rem;
     margin-bottom: 12px;
+}
+
+.bulk-category-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0 14px;
+    flex-wrap: wrap;
+}
+
+.bulk-category-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.bulk-category-field {
+    flex: 1;
+    min-width: 160px;
+    padding: 7px 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    transition: border-color 0.15s;
+}
+
+.bulk-category-field:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.bulk-category-field:disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
 }
 
 .bulk-textarea {

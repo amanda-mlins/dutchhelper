@@ -655,6 +655,7 @@ def api_conjunction_game_sentence_pool(
 
 class WordBulkAddRequest(BaseModel):
     words: List[str]
+    category: Optional[str] = None  # applied to every successfully added word
 
 
 class WordBulkDeleteRequest(BaseModel):
@@ -854,7 +855,11 @@ async def bulk_add_user_words(
     async def add_one(word: str) -> dict:
         async with semaphore:
             try:
-                await service.add_word(word=word, user_id=current_user.id)
+                entry = await service.add_word(word=word, user_id=current_user.id)
+                # Apply the requested category if provided and the word is new
+                if body.category and entry.category != body.category:
+                    entry.category = body.category.strip() or None
+                    db.commit()
                 return {"word": word, "status": "added"}
             except ProcessingError as e:
                 return {"word": word, "status": "error", "error": str(e)}
