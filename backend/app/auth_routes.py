@@ -34,6 +34,7 @@ from app.auth_service import (
     create_refresh_token,
     create_or_update_google_user,
     create_user_with_password,
+    decode_refresh_token_payload,
     get_current_user,
     get_current_user_from_refresh_cookie,
     validate_password_strength,
@@ -79,19 +80,29 @@ auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 # Cookie helpers
 # ---------------------------------------------------------------------------
 _COOKIE_NAME = "refresh_token"
-_COOKIE_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600  # seconds
+_COOKIE_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600          # 7 days (seconds)
+_COOKIE_MAX_AGE_REMEMBER = settings.REMEMBER_ME_EXPIRE_DAYS * 24 * 3600  # 30 days (seconds)
 
 
-def _set_refresh_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
+def _set_refresh_cookie(response: Response, token: str, remember_me: bool = False) -> None:
+    """
+    Write the refresh token as an httpOnly cookie.
+    - remember_me=False  → max_age omitted → session cookie (deleted when browser closes)
+    - remember_me=True   → max_age=30 days → persisted cookie (survives browser restart)
+    """
+    kwargs = dict(
         key=_COOKIE_NAME,
         value=token,
-        httponly=True,           # Not readable by JavaScript
-        secure=not settings.DEBUG,   # False in dev (HTTP), True in prod (HTTPS)
-        samesite="lax",          # Protects against CSRF while allowing top-level redirects
-        max_age=_COOKIE_MAX_AGE,
-        path="/api/auth",        # Scope cookie to auth endpoints only
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="lax",
+        path="/api/auth",
     )
+    if remember_me:
+        kwargs["max_age"] = _COOKIE_MAX_AGE_REMEMBER
+    # When remember_me is False we deliberately omit max_age so the browser
+    # treats it as a session cookie and discards it on close.
+    response.set_cookie(**kwargs)
 
 
 def _clear_refresh_cookie(response: Response) -> None:
@@ -114,7 +125,8 @@ def register(request: Request, body: models.UserRegister, response: Response, db
     user = create_user_with_password(db, body.email, body.password)
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
-    _set_refresh_cookie(response, refresh_token)
+    # Registration always issues a session cookie (no Remember me on sign-up).
+    _set_refresh_cookie(response, refresh_token, remember_me=False)
     return models.TokenResponse(access_token=access_token, user=user)
 
 
@@ -124,12 +136,16 @@ def login(request: Request, body: models.UserLogin, response: Response, db: Sess
     """
     Login with email and password.
     Returns an access token and sets the refresh cookie.
+    When body.remember_me is True the refresh token lives for 30 days and the
+    cookie is persisted on disk; otherwise it is a session cookie (cleared on
+    browser close) backed by a 7-day JWT.
     Rate limited to 10 attempts per minute per IP.
     """
     user = authenticate_user(db, body.email, body.password)
     access_token = create_access_token(user.id)
-    refresh_token = create_refresh_token(user.id)
-    _set_refresh_cookie(response, refresh_token)
+    expire_days = settings.REMEMBER_ME_EXPIRE_DAYS if body.remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
+    refresh_token = create_refresh_token(user.id, expire_days=expire_days)
+    _set_refresh_cookie(response, refresh_token, remember_me=body.remember_me)
     return models.TokenResponse(access_token=access_token, user=user)
 
 
@@ -145,11 +161,30 @@ def refresh(request: Request, response: Response, user: models.User = Depends(ge
     """
     Issue a new access token using the httpOnly refresh cookie.
     Also rotates the refresh token (refresh token rotation).
+    Preserves the remember-me TTL: if the original token lived longer than the
+    standard 7-day window, the rotated token is also issued with the long TTL
+    and the cookie is kept persistent.
     Rate limited to 30 per minute per IP.
     """
+    # Detect remember-me by inspecting the incoming token's own lifetime.
+    incoming_token = request.cookies.get("refresh_token", "")
+    remember_me = False
+    try:
+        payload = decode_refresh_token_payload(incoming_token)
+        iat = payload.get("iat", 0)
+        exp = payload.get("exp", 0)
+        # If the token lifetime exceeds the standard window by more than a day,
+        # it was originally issued as a "remember me" token.
+        standard_ttl_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+        if (exp - iat) > standard_ttl_seconds + 86400:
+            remember_me = True
+    except Exception:
+        pass  # fallback: session cookie
+
+    expire_days = settings.REMEMBER_ME_EXPIRE_DAYS if remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
     new_access_token = create_access_token(user.id)
-    new_refresh_token = create_refresh_token(user.id)
-    _set_refresh_cookie(response, new_refresh_token)
+    new_refresh_token = create_refresh_token(user.id, expire_days=expire_days)
+    _set_refresh_cookie(response, new_refresh_token, remember_me=remember_me)
     return models.TokenResponse(access_token=new_access_token, user=user)
 
 

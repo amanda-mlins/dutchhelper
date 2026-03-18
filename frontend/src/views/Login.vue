@@ -29,6 +29,13 @@
                         placeholder="Your password" required />
                 </div>
 
+                <div class="form-group form-group--remember">
+                    <label class="remember-label">
+                        <input type="checkbox" v-model="rememberMe" class="remember-checkbox" />
+                        <span class="remember-text">Remember me</span>
+                    </label>
+                </div>
+
                 <p v-if="errorMessage" class="error-msg">{{ errorMessage }}</p>
 
                 <button type="submit" class="btn-primary" :disabled="auth.loading">
@@ -59,6 +66,7 @@ const route = useRoute()
 
 const email = ref('')
 const password = ref('')
+const rememberMe = ref(false)
 const errorMessage = ref('')
 
 const urlError = computed(() => {
@@ -72,7 +80,7 @@ const urlError = computed(() => {
 async function handleLogin() {
     errorMessage.value = ''
     try {
-        await auth.login(email.value, password.value)
+        await auth.login(email.value, password.value, rememberMe.value)
         const redirect = route.query.redirect || '/'
         router.push(redirect)
     } catch (err) {
@@ -205,6 +213,44 @@ async function handleLogin() {
 .btn-primary:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* ── Remember me ────────────────────────────────────────────────────────── */
+.form-group--remember {
+    margin-bottom: 8px;
+}
+
+/* Override the generic .form-group label block rule */
+.form-group--remember .remember-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: normal;
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 0;
+    width: fit-content;
+}
+
+.remember-checkbox {
+    /* Reset the width:100% from .form-group input */
+    width: 16px !important;
+    height: 16px;
+    padding: 0 !important;
+    border: none !important;
+    accent-color: #667eea;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.remember-text {
+    font-size: 14px;
+    color: #555;
+    font-weight: normal;
+    line-height: 1;
 }
 
 .error-msg {

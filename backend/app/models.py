@@ -139,6 +139,7 @@ class UserLogin(BaseModel):
     """Schema for user login."""
     email: EmailStr
     password: str
+    remember_me: bool = False
 
 class UserSchema(BaseModel):
     """Schema for returning user info (never expose password)."""

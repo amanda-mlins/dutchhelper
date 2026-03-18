@@ -77,12 +77,12 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
-    async function login(email, password) {
+    async function login(email, password, rememberMe = false) {
         loading.value = true
         try {
             const { data } = await axios.post(
                 `${API}/api/auth/login`,
-                { email, password },
+                { email, password, remember_me: rememberMe },
                 { withCredentials: true },
             )
             _applySession(data)

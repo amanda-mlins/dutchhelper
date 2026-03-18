@@ -95,10 +95,11 @@ def create_access_token(user_id: int) -> str:
         "access",
     )
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: int, expire_days: Optional[int] = None) -> str:
+    days = expire_days if expire_days is not None else settings.REFRESH_TOKEN_EXPIRE_DAYS
     return _create_token(
         {"sub": str(user_id)},
-        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        timedelta(days=days),
         "refresh",
     )
 
@@ -117,6 +118,27 @@ def _decode_token(token: str, expected_type: str) -> int:
         if sub is None:
             raise credentials_exception
         return int(sub)
+    except pyjwt.PyJWTError:
+        raise credentials_exception
+
+
+def decode_refresh_token_payload(token: str) -> dict:
+    """
+    Decode a refresh token and return the full payload dict.
+    Raises 401 on any failure.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = pyjwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise credentials_exception
+        if payload.get("sub") is None:
+            raise credentials_exception
+        return payload
     except pyjwt.PyJWTError:
         raise credentials_exception
 

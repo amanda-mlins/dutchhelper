@@ -47,8 +47,9 @@ class Settings(BaseSettings):
         description="Secret key for signing JWTs. MUST be changed in production."
     )
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15, description="Access token TTL in minutes")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Access token TTL in minutes")
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Refresh token TTL in days")
+    REMEMBER_ME_EXPIRE_DAYS: int = Field(default=30, description="Refresh token TTL when 'Remember me' is checked")
 
     # Google OAuth Settings
     GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, description="Google OAuth client ID")
