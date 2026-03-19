@@ -13,6 +13,10 @@
             <span class="category-chip">🏷️ {{ word.category }}</span>
         </div>
         <div class="card-footer">
+            <router-link v-if="conjugatorVerb" :to="`/conjugator/${encodeURIComponent(conjugatorVerb)}`"
+                class="icon-btn conjugate-btn" title="See conjugation table">
+                🔀
+            </router-link>
             <button @click="$emit('edit', word)" class="icon-btn edit-btn">
                 <i class="fas fa-pencil-alt"></i>
             </button>
@@ -30,6 +34,25 @@ export default {
         word: {
             type: Object,
             required: true,
+        },
+    },
+    computed: {
+        isVerb() {
+            return this.word.word_type === 'verb'
+        },
+        isExpression() {
+            return this.word.word_type === 'expression'
+        },
+        conjugatorVerb() {
+            // For plain verbs use the word itself.
+            // For prep+verb expressions (e.g. "op wachten", "aan denken"),
+            // extract the last token which is always the verb.
+            if (this.isVerb) return this.word.word
+            if (this.isExpression) {
+                const parts = this.word.word.trim().split(/\s+/)
+                return parts[parts.length - 1]
+            }
+            return null
         },
     },
 };
@@ -116,5 +139,16 @@ export default {
 
 .delete-btn:hover {
     color: #e74c3c;
+}
+
+.conjugate-btn {
+    text-decoration: none;
+    font-size: 15px;
+    margin-right: auto;
+    /* push edit/delete to the right */
+}
+
+.conjugate-btn:hover {
+    opacity: 0.75;
 }
 </style>

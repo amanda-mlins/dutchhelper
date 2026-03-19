@@ -194,7 +194,7 @@
         <!-- Active filters summary -->
         <div v-if="searchQuery || typeFilter || categoryFilter" class="filter-summary">
             <span class="filter-summary-count">{{ filteredWords.length }} result{{ filteredWords.length !== 1 ? 's' : ''
-            }}</span>
+                }}</span>
             <span v-if="searchQuery" class="filter-chip">
                 🔍 "{{ searchQuery }}" <button @click="searchQuery = ''">✕</button>
             </span>
@@ -258,7 +258,14 @@
                             <input type="checkbox" :checked="selectedIds.has(word.id)"
                                 @change="toggleSelect(word.id)" />
                         </td>
-                        <td class="col-word list-word">{{ word.word }}</td>
+                        <td class="col-word list-word">
+                            {{ word.word }}
+                            <router-link v-if="word.word_type === 'verb' || word.word_type === 'expression'"
+                                :to="`/conjugator/${encodeURIComponent(word.word_type === 'expression' ? word.word.trim().split(' ').at(-1) : word.word)}`"
+                                class="conjugate-link" title="See conjugation table">
+                                🔀
+                            </router-link>
+                        </td>
                         <td class="col-type">
                             <span class="word-type-badge">{{ word.word_type }}</span>
                         </td>
@@ -1454,6 +1461,20 @@ export default {
 .list-word {
     font-weight: 700;
     color: #667eea;
+    white-space: nowrap;
+}
+
+.conjugate-link {
+    margin-left: 5px;
+    font-size: 13px;
+    text-decoration: none;
+    vertical-align: middle;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.conjugate-link:hover {
+    opacity: 1;
 }
 
 .list-def {
