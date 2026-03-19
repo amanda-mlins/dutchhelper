@@ -164,7 +164,10 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // Wait for the silent refresh to finish before making any guard decisions
+  // Wait for the silent refresh to finish before making any guard decisions.
+  // We call initialize() here too — it is idempotent: if AppMain already
+  // triggered it, the shared _initPromise is reused and no second HTTP request
+  // is made.
   if (auth.initializing) {
     await auth.initialize()
   }

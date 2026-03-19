@@ -77,6 +77,7 @@ Do **not** add `DATABASE_URL` — it is injected automatically by the PostgreSQL
 | `JWT_ALGORITHM` | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
+| `REMEMBER_ME_EXPIRE_DAYS` | `30` |
 | `OPENROUTER_API_KEY` | Your OpenRouter API key |
 | `ALLOWED_ORIGINS` | `["https://your-netlify-app.netlify.app"]` *(update after Netlify deploy)* |
 | `FRONTEND_URL` | `https://your-netlify-app.netlify.app` *(update after Netlify deploy)* |
