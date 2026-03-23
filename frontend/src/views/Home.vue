@@ -2,7 +2,7 @@
   <div id="app" class="container">
     <header class="header">
       <h1>🇳🇱 DutchHelper</h1>
-      <p>Tools for leraning Dutch</p>
+      <p>Tools for learning Dutch</p>
     </header>
 
     <main class="main">
