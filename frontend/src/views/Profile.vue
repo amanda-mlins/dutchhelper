@@ -43,7 +43,7 @@
             <div v-else-if="statsError" class="state-msg state-error">{{ statsError }}</div>
             <div v-else class="stats-grid">
                 <!-- Article game -->
-                <div class="stat-block">
+                <router-link to="/article-game/stats" class="stat-block stat-link">
                     <div class="stat-icon">📰</div>
                     <div class="stat-label">Article Game</div>
                     <div class="stat-number">{{ articleStats.total_games ?? 0 }}</div>
@@ -51,9 +51,10 @@
                     <div class="stat-acc" v-if="articleStats.total_games">
                         {{ articleStats.avg_accuracy ?? 0 }}% avg accuracy
                     </div>
-                </div>
+                    <div class="stat-details-hint">View details →</div>
+                </router-link>
                 <!-- Verb game -->
-                <div class="stat-block">
+                <router-link to="/verb-game/stats" class="stat-block stat-link">
                     <div class="stat-icon">🔤</div>
                     <div class="stat-label">Verb Game</div>
                     <div class="stat-number">{{ verbStats.total_games ?? 0 }}</div>
@@ -61,9 +62,10 @@
                     <div class="stat-acc" v-if="verbStats.total_games">
                         {{ verbStats.avg_accuracy ?? 0 }}% avg accuracy
                     </div>
-                </div>
+                    <div class="stat-details-hint">View details →</div>
+                </router-link>
                 <!-- Conjunction game -->
-                <div class="stat-block">
+                <router-link to="/conjunction-game/stats" class="stat-block stat-link">
                     <div class="stat-icon">🔗</div>
                     <div class="stat-label">Conjunction Game</div>
                     <div class="stat-number">{{ conjStats.total_games ?? 0 }}</div>
@@ -74,7 +76,22 @@
                             · 🔁 {{ conjStats.review_queue_size }} in review queue
                         </span>
                     </div>
-                </div>
+                    <div class="stat-details-hint">View details →</div>
+                </router-link>
+                <!-- Preposition game -->
+                <router-link to="/prep-verb-game/stats" class="stat-block stat-link">
+                    <div class="stat-icon">🔀</div>
+                    <div class="stat-label">Preposition Game</div>
+                    <div class="stat-number">{{ prepStats.total_games ?? 0 }}</div>
+                    <div class="stat-sub">games played</div>
+                    <div class="stat-acc" v-if="prepStats.total_games">
+                        {{ prepStats.avg_accuracy ?? 0 }}% avg accuracy
+                        <span v-if="prepStats.review_queue_size" class="review-tag">
+                            · 🔁 {{ prepStats.review_queue_size }} in review queue
+                        </span>
+                    </div>
+                    <div class="stat-details-hint">View details →</div>
+                </router-link>
                 <!-- Total -->
                 <div class="stat-block stat-total">
                     <div class="stat-icon">🏆</div>
@@ -157,13 +174,17 @@ const statsError = ref('')
 const articleStats = ref({})
 const verbStats = ref({})
 const conjStats = ref({})
+const prepStats = ref({})
 
 const totalGames = computed(
-    () => (articleStats.value.total_games ?? 0) + (verbStats.value.total_games ?? 0) + (conjStats.value.total_games ?? 0)
+    () => (articleStats.value.total_games ?? 0)
+        + (verbStats.value.total_games ?? 0)
+        + (conjStats.value.total_games ?? 0)
+        + (prepStats.value.total_games ?? 0)
 )
 
 const overallAccuracy = computed(() => {
-    const parts = [articleStats.value, verbStats.value, conjStats.value]
+    const parts = [articleStats.value, verbStats.value, conjStats.value, prepStats.value]
         .filter(s => s.total_games > 0)
     if (!parts.length) return 0
     return Math.round(parts.reduce((sum, s) => sum + s.avg_accuracy, 0) / parts.length)
@@ -176,14 +197,16 @@ onMounted(async () => {
     }
     try {
         const ax = auth.getAuthAxios()
-        const [a, v, c] = await Promise.all([
+        const [a, v, c, p] = await Promise.all([
             ax.get('/api/game/stats'),
             ax.get('/api/verb-game/stats'),
             ax.get('/api/conjunction-game/stats'),
+            ax.get('/api/prep-verb-game/stats'),
         ])
         articleStats.value = a.data
         verbStats.value = v.data
         conjStats.value = c.data
+        prepStats.value = p.data
     } catch (e) {
         statsError.value = 'Could not load activity stats.'
     } finally {
@@ -363,6 +386,32 @@ async function handleLogout() {
     flex-direction: column;
     align-items: center;
     gap: 3px;
+}
+
+.stat-link {
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+    cursor: pointer;
+}
+
+.stat-link:hover {
+    border-color: #a5b4fc;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+    transform: translateY(-2px);
+}
+
+.stat-link:hover .stat-details-hint {
+    opacity: 1;
+}
+
+.stat-details-hint {
+    margin-top: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #7c3aed;
+    opacity: 0;
+    transition: opacity 0.15s;
 }
 
 .stat-total {
