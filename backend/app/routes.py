@@ -1548,6 +1548,45 @@ def prep_verb_stats(
     return svc.get_stats()
 
 
+@router.get("/prep-verb-game/history")
+def prep_verb_history(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return all prep-verb game sessions with per-answer detail for the current user."""
+    sessions = (
+        db.query(models.PrepVerbGameSession)
+        .filter(models.PrepVerbGameSession.user_id == current_user.id)
+        .order_by(models.PrepVerbGameSession.played_at.desc())
+        .limit(50)
+        .all()
+    )
+    result = []
+    for s in sessions:
+        result.append({
+            "id": s.id,
+            "played_at": s.played_at.isoformat(),
+            "mode": s.mode,
+            "question_count": s.question_count,
+            "score": s.score,
+            "accuracy": s.accuracy,
+            "answers": [
+                {
+                    "verb": a.verb,
+                    "preposition": a.preposition,
+                    "sentence": a.sentence,
+                    "correct_answer": a.correct_answer,
+                    "user_answer": a.user_answer,
+                    "is_correct": a.is_correct,
+                    "english_hint": a.english_hint,
+                    "mode": a.mode,
+                }
+                for a in s.answers
+            ],
+        })
+    return result
+
+
 # ===========================================================================
 # Admin — Prep-verb pair cache  (/api/admin/prep-verb-pairs/*)
 # ===========================================================================

@@ -48,6 +48,11 @@
                     🔁 You have <strong>{{ stats.review_queue_size }}</strong> pair{{
                         stats.review_queue_size !== 1 ? 's' : '' }} queued for review!
                 </div>
+                <div class="stats-panel-footer">
+                    <router-link to="/prep-verb-game/stats" class="stats-detail-link">
+                        📈 View detailed stats →
+                    </router-link>
+                </div>
             </div>
 
             <!-- Mode selection -->
@@ -576,6 +581,22 @@ export default {
 .stats-panel-header h3 {
     margin: 0;
     font-size: 1rem;
+}
+
+.stats-panel-footer {
+    margin-top: 12px;
+    text-align: right;
+}
+
+.stats-detail-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #4a5dc7;
+    text-decoration: none;
+}
+
+.stats-detail-link:hover {
+    text-decoration: underline;
 }
 
 .stats-grid {
