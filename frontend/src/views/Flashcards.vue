@@ -273,7 +273,7 @@
             <div class="nav-row">
                 <button class="btn-nav" @click="prev" :disabled="currentIndex === 0">← Prev</button>
                 <button class="btn-nav btn-nav-quit" @click="quitSession">Quit</button>
-                <button class="btn-nav" @click="next" :disabled="currentIndex === deck.length - 1 && !isFlipped">
+                <button class="btn-nav" @click="next" :disabled="isFlipped && !(_cardKey(currentCard) in ratings)">
                     {{ currentIndex === deck.length - 1 ? 'Finish →' : 'Next →' }}
                 </button>
             </div>
@@ -283,7 +283,14 @@
                 <kbd>Space</kbd> flip &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> navigate &nbsp;·&nbsp;
                 <kbd>1</kbd> Still learning &nbsp;·&nbsp; <kbd>2</kbd> Got it
             </p>
+            <br>
+            <div class="results-summary">
+                <div class="result-stat correct">Got {{ correctCount }} right</div>
+                <div class="result-stat wrong">Got {{ wrongCount }} wrong</div>
+                <div class="result-stat total">Rated {{ ratedCount }} cards</div>
+            </div>
         </div>
+
 
         <!-- ══════════════════════════════════════════════════════════════ -->
         <!-- SCREEN 3 · Results                                            -->
@@ -555,7 +562,8 @@ export default {
 
         /** Stable key used as the ratings map key for any card type */
         _cardKey(card) {
-            if (card._prepCard) return `prep-${card.id}`;
+            // Prep-pair cards: use verb+preposition as key — id can be null for stub pairs
+            if (card._prepCard) return `prep-${card.verb}+${card.preposition}`;
             return String(card.id);
         },
 
@@ -631,7 +639,8 @@ export default {
         },
 
         rate(correct) {
-            this.ratings[this._cardKey(this.currentCard)] = correct;
+            const key = this._cardKey(this.currentCard);
+            this.ratings = { ...this.ratings, [key]: correct };
             this.advance();
         },
 
@@ -651,10 +660,17 @@ export default {
                 this.flip();
                 return;
             }
+            // Card is flipped — must be rated before advancing
+            const key = this._cardKey(this.currentCard);
+            if (!(key in this.ratings)) {
+                // Not yet rated — do nothing, user must click a rating button
+                return;
+            }
             if (this.currentIndex < this.deck.length - 1) {
                 this.currentIndex++;
                 this.isFlipped = false;
             } else {
+                // Last card rated → results
                 this.screen = 'results';
             }
         },
